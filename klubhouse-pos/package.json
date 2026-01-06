@@ -1,0 +1,9 @@
+{
+  "name": "klubhouse-pos",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "npm --workspace apps/api run dev & npm --workspace apps/web run dev",
+    "build": "npm --workspace apps/api run build && npm --workspace apps/web run build"
+  }
+}

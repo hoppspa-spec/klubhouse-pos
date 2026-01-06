@@ -1,0 +1,53 @@
+klubhouse-pos/
+  package.json
+  render.yaml
+  prisma/
+    schema.prisma
+  apps/
+    api/
+      package.json
+      tsconfig.json
+      src/
+        main.ts
+        app.module.ts
+        prisma.service.ts
+        auth/
+          auth.module.ts
+          auth.controller.ts
+          auth.service.ts
+          auth.guard.ts
+          roles.guard.ts
+          roles.decorator.ts
+        users/
+          users.module.ts
+          users.service.ts
+        tickets/
+          tickets.module.ts
+          tickets.controller.ts
+          tickets.service.ts
+          pricing.ts
+          receipt.ts
+        products/
+          products.module.ts
+          products.controller.ts
+          products.service.ts
+    web/
+      package.json
+      next.config.js
+      app/
+        layout.tsx
+        page.tsx
+        login/
+          page.tsx
+        tables/
+          page.tsx
+      lib/
+        api.ts
+        auth.ts
+
+
+
+
+
+
+
