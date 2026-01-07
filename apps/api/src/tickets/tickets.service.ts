@@ -113,12 +113,12 @@ export class TicketsService {
       include: { items: { include: { product: true } }, table: true, openedBy: true }
     });
     if (!ticket) throw new NotFoundException("Ticket no existe");
-    if (ticket.status !== TicketStatus.CHECKOUT && ticket.kind !== TicketKind.BAR) {
-      // BAR puede ir directo a checkout sin "close"
-      if (ticket.kind === TicketKind.BAR && ticket.status === TicketStatus.OPEN) {
-        await this.prisma.ticket.update({ where: { id: ticketId }, data: { status: TicketStatus.CHECKOUT } });
-      } else {
-        throw new BadRequestException("Ticket no listo para cobro");
+    if (ticket.status !== TicketStatus.CHECKOUT && ticket.kind !== "BAR") {
+    // BAR puede ir directo a checkout sin "close"
+    if (ticket.kind === TicketKind.BAR && ticket.status === TicketStatus.OPEN) {
+    await this.prisma.ticket.update({ ... });
+    } else {
+    throw new BadRequestException("Ticket no listo para cobro");
       }
     }
     if (ticket.status === TicketStatus.PAID) throw new BadRequestException("Ya pagado");
@@ -202,4 +202,5 @@ export class TicketsService {
     });
   }
 }
+
 
