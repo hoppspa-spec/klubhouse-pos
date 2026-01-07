@@ -107,20 +107,35 @@ export class TicketsService {
     });
   }
 
-  async checkout(ticketId: string, userId: string, method: "CASH" | "DEBIT") {
+    async checkout(ticketId: string, userId: string, method: "CASH" | "DEBIT") {
     const ticket = await this.prisma.ticket.findUnique({
       where: { id: ticketId },
       include: { items: { include: { product: true } }, table: true, openedBy: true }
     });
+
     if (!ticket) throw new NotFoundException("Ticket no existe");
-    if (ticket.status !== TicketStatus.CHECKOUT && ticket.kind !== "BAR") {
-    // BAR puede ir directo a checkout sin "close"
-    if (ticket.kind === TicketKind.BAR && ticket.status === TicketStatus.OPEN) {
-    await this.prisma.ticket.update({ ... });
-     } else {
-    throw new BadRequestException("Ticket no listo para cobro");
-     }
+
+    // ---- REGLA DE ESTADO PARA CHECKOUT ----
+    if (ticket.kind === TicketKind.BAR) {
+      // BAR puede ir directo a checkout desde OPEN
+      if (ticket.status === TicketStatus.OPEN) {
+        await this.prisma.ticket.update({
+          where: { id: ticketId },
+          data: { status: TicketStatus.CHECKOUT }
+        });
+
+        // actualizar en memoria para que el resto del método siga coherente
+        (ticket as any).status = TicketStatus.CHECKOUT;
+      } else if (ticket.status !== TicketStatus.CHECKOUT) {
+        throw new BadRequestException("Ticket no listo para cobro");
+      }
+    } else {
+      // RENTAL: debe venir ya cerrado (CHECKOUT)
+      if (ticket.status !== TicketStatus.CHECKOUT) {
+        throw new BadRequestException("Ticket no listo para cobro");
+      }
     }
+
     if (ticket.status === TicketStatus.PAID) throw new BadRequestException("Ya pagado");
 
     // Recalcular totals SIEMPRE
@@ -142,6 +157,7 @@ export class TicketsService {
           where: { id: it.productId },
           data: { stock: { decrement: it.qty } }
         });
+
         await tx.stockMovement.create({
           data: {
             productId: it.productId,
@@ -167,6 +183,8 @@ export class TicketsService {
     });
 
     return { ok: true, receiptNumber: paid.receiptNumber, total };
+    }
+
   }
 
   async receiptHtml(ticketId: string) {
@@ -202,6 +220,7 @@ export class TicketsService {
     });
   }
 }
+
 
 
 
