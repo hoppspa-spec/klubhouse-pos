@@ -1,15 +1,15 @@
 {
   "name": "klubhouse-pos-api",
   "private": true,
-  "scripts": {
+    "scripts": {
     "dev": "npx nest start --watch",
     "build": "npx nest build",
     "start": "node dist/main.js",
 
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:deploy": "prisma migrate deploy",
-    "prisma:seed": "npx prisma db seed"
+    "prisma:migrate": "prisma migrate deploy",
+    "prisma:seed": "prisma db seed",
+    "prisma:generate": "prisma generate"
+
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
