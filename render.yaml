@@ -13,11 +13,11 @@ services:
     envVars:
       - key: TZ
         value: America/Santiago
-      - key: DATABASE_URL
+      - key: postgresql://klubhouse_pos_db_user:q8fzWvJv1OVCcPxOhLQc3XsV7iuVZQPD@dpg-d5eqjnsjebjc73e0kl10-a/klubhouse_pos_db
         sync: false
-      - key: JWT_SECRET
+      - key: b4b6b9e9b7a14b3a9dbf7c2a2a0f1c3d7b6c9e1a2f4d8c0b1a6e9d2c5f7a8b1c
         sync: false
-      - key: REFRESH_SECRET
+      - key: f1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e
         sync: false
       - key: CORS_ORIGINS
         value: "https://klubhouse-pos-web.onrender.com"
@@ -34,3 +34,4 @@ services:
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: "https://klubhouse-pos-api.onrender.com"
+
