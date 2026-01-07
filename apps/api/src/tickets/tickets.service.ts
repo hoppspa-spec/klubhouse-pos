@@ -88,7 +88,7 @@ export class TicketsService {
   async closeRental(ticketId: string) {
     const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException("Ticket no existe");
-    if (ticket.kind !== "RENTAL") throw new BadRequestException("Barra no se cierra por tiempo");
+    if (ticket.kind !== TicketKind.RENTAL) throw new BadRequestException("Barra no se cierra por tiempo");
     if (!ticket.startedAt) throw new BadRequestException("Ticket sin inicio");
     if (ticket.status !== TicketStatus.OPEN) throw new BadRequestException("Estado inválido");
 
@@ -113,9 +113,9 @@ export class TicketsService {
       include: { items: { include: { product: true } }, table: true, openedBy: true }
     });
     if (!ticket) throw new NotFoundException("Ticket no existe");
-    if (ticket.status !== TicketStatus.CHECKOUT && ticket.kind !== "BAR") {
+    if (ticket.status !== TicketStatus.CHECKOUT && ticket.kind !== TicketKind.BAR) {
       // BAR puede ir directo a checkout sin "close"
-      if (ticket.kind === "BAR" && ticket.status === TicketStatus.OPEN) {
+      if (ticket.kind === TicketKind.BAR && ticket.status === TicketStatus.OPEN) {
         await this.prisma.ticket.update({ where: { id: ticketId }, data: { status: TicketStatus.CHECKOUT } });
       } else {
         throw new BadRequestException("Ticket no listo para cobro");
@@ -125,7 +125,7 @@ export class TicketsService {
 
     // Recalcular totals SIEMPRE
     const consumos = ticket.items.reduce((a, it) => a + it.lineTotal, 0);
-    const rental = ticket.kind === "RENTAL" ? (ticket.rentalAmount ?? 0) : 0;
+    const rental = ticket.kind === TicketKind.RENTAL ? (ticket.rentalAmount ?? 0) : 0;
     const total = roundUp100(rental + consumos);
 
     // Validar stock (se descuenta al pagar)
@@ -202,3 +202,4 @@ export class TicketsService {
     });
   }
 }
+
