@@ -117,9 +117,9 @@ export class TicketsService {
     // BAR puede ir directo a checkout sin "close"
     if (ticket.kind === TicketKind.BAR && ticket.status === TicketStatus.OPEN) {
     await this.prisma.ticket.update({ ... });
-    } else {
+     } else {
     throw new BadRequestException("Ticket no listo para cobro");
-      }
+     }
     }
     if (ticket.status === TicketStatus.PAID) throw new BadRequestException("Ya pagado");
 
@@ -202,5 +202,6 @@ export class TicketsService {
     });
   }
 }
+
 
 
