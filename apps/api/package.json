@@ -2,8 +2,8 @@
   "name": "klubhouse-pos-api",
   "private": true,
   "scripts": {
-    "dev": "nest start --watch",
-    "build": "nest build",
+    "dev": "npx nest start --watch",
+    "build": "npx nest build",
     "start": "node dist/main.js",
 
     "prisma:generate": "prisma generate",
