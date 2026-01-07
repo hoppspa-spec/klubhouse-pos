@@ -4,7 +4,7 @@ services:
     env: node
     rootDir: apps/api
     plan: starter
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run start
     envVars:
       - key: NODE_ENV
@@ -32,4 +32,5 @@ services:
         value: production
       - key: NEXT_PUBLIC_API_URL
         sync: false
+
 
