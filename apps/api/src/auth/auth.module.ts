@@ -1,13 +1,19 @@
 import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
-import { PrismaService } from "../prisma.service";
-import { AuthController } from "./auth.controller";
-import { AuthService } from "./auth.service";
+
+import { AuthGuard } from "./auth.guard";
+import { RolesGuard } from "./roles.guard";
 
 @Module({
-  imports: [JwtModule.register({})],
-  controllers: [AuthController],
-  providers: [AuthService, PrismaService],
-  exports: [AuthService]
+  imports: [
+    JwtModule.register({
+      // Puedes dejarlo vacío si usas process.env.JWT_SECRET dentro del guard/service,
+      // pero lo ideal es setearlo aquí:
+      // secret: process.env.JWT_SECRET,
+      // signOptions: { expiresIn: "7d" },
+    }),
+  ],
+  providers: [AuthGuard, RolesGuard],
+  exports: [JwtModule, AuthGuard, RolesGuard], // <-- CLAVE
 })
 export class AuthModule {}
