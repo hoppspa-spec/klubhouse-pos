@@ -48,7 +48,9 @@ export class TicketsService {
   }
 
   async addItem(ticketId: string, productId: string, qtyDelta: number) {
-    if (!Number.isInteger(qtyDelta) || qtyDelta === 0) throw new BadRequestException("qtyDelta inválido");
+    if (!Number.isInteger(qtyDelta) || qtyDelta === 0) {
+      throw new BadRequestException("qtyDelta inválido");
+    }
 
     const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException("Ticket no existe");
@@ -107,25 +109,22 @@ export class TicketsService {
     });
   }
 
-    async checkout(ticketId: string, userId: string, method: "CASH" | "DEBIT") {
+  async checkout(ticketId: string, userId: string, method: "CASH" | "DEBIT") {
     const ticket = await this.prisma.ticket.findUnique({
       where: { id: ticketId },
       include: { items: { include: { product: true } }, table: true, openedBy: true }
     });
-
     if (!ticket) throw new NotFoundException("Ticket no existe");
+    if (ticket.status === TicketStatus.PAID) throw new BadRequestException("Ya pagado");
 
-    // ---- REGLA DE ESTADO PARA CHECKOUT ----
+    // --- Regla de estado para checkout ---
+    // BAR: puede pasar de OPEN -> CHECKOUT directo
     if (ticket.kind === TicketKind.BAR) {
-      // BAR puede ir directo a checkout desde OPEN
       if (ticket.status === TicketStatus.OPEN) {
         await this.prisma.ticket.update({
           where: { id: ticketId },
           data: { status: TicketStatus.CHECKOUT }
         });
-
-        // actualizar en memoria para que el resto del método siga coherente
-        (ticket as any).status = TicketStatus.CHECKOUT;
       } else if (ticket.status !== TicketStatus.CHECKOUT) {
         throw new BadRequestException("Ticket no listo para cobro");
       }
@@ -136,15 +135,20 @@ export class TicketsService {
       }
     }
 
-    if (ticket.status === TicketStatus.PAID) throw new BadRequestException("Ya pagado");
+    // Releer ticket para tener estado actualizado (evita hacks tipo "as any")
+    const ticket2 = await this.prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: { items: { include: { product: true } }, table: true, openedBy: true }
+    });
+    if (!ticket2) throw new NotFoundException("Ticket no existe");
 
     // Recalcular totals SIEMPRE
-    const consumos = ticket.items.reduce((a, it) => a + it.lineTotal, 0);
-    const rental = ticket.kind === TicketKind.RENTAL ? (ticket.rentalAmount ?? 0) : 0;
+    const consumos = ticket2.items.reduce((a, it) => a + it.lineTotal, 0);
+    const rental = ticket2.kind === TicketKind.RENTAL ? (ticket2.rentalAmount ?? 0) : 0;
     const total = roundUp100(rental + consumos);
 
     // Validar stock (se descuenta al pagar)
-    for (const it of ticket.items) {
+    for (const it of ticket2.items) {
       if (it.product.stock < it.qty) {
         throw new BadRequestException(`Stock insuficiente: ${it.product.name}`);
       }
@@ -152,7 +156,7 @@ export class TicketsService {
 
     const paid = await this.prisma.$transaction(async (tx) => {
       // Descontar stock + movimiento
-      for (const it of ticket.items) {
+      for (const it of ticket2.items) {
         await tx.product.update({
           where: { id: it.productId },
           data: { stock: { decrement: it.qty } }
@@ -163,7 +167,7 @@ export class TicketsService {
             productId: it.productId,
             type: "OUT",
             qty: it.qty,
-            reason: `Venta ticket ${ticket.id}`,
+            reason: `Venta ticket ${ticket2.id}`,
             createdById: userId
           }
         });
@@ -171,20 +175,18 @@ export class TicketsService {
 
       const payment = await tx.payment.create({
         data: {
-          ticketId: ticket.id,
+          ticketId: ticket2.id,
           method: method as any,
           totalAmount: total,
           paidById: userId
         }
       });
 
-      await tx.ticket.update({ where: { id: ticket.id }, data: { status: "PAID" } });
+      await tx.ticket.update({ where: { id: ticket2.id }, data: { status: TicketStatus.PAID } });
       return payment;
     });
 
     return { ok: true, receiptNumber: paid.receiptNumber, total };
-    }
-
   }
 
   async receiptHtml(ticketId: string) {
@@ -220,7 +222,3 @@ export class TicketsService {
     });
   }
 }
-
-
-
-
