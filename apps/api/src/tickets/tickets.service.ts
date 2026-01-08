@@ -48,9 +48,7 @@ export class TicketsService {
   }
 
   async addItem(ticketId: string, productId: string, qtyDelta: number) {
-    if (!Number.isInteger(qtyDelta) || qtyDelta === 0) {
-      throw new BadRequestException("qtyDelta inválido");
-    }
+    if (!Number.isInteger(qtyDelta) || qtyDelta === 0) throw new BadRequestException("qtyDelta inválido");
 
     const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException("Ticket no existe");
@@ -114,49 +112,42 @@ export class TicketsService {
       where: { id: ticketId },
       include: { items: { include: { product: true } }, table: true, openedBy: true }
     });
-    if (!ticket) throw new NotFoundException("Ticket no existe");
-    if (ticket.status === TicketStatus.PAID) throw new BadRequestException("Ya pagado");
 
-    // --- Regla de estado para checkout ---
-    // BAR: puede pasar de OPEN -> CHECKOUT directo
+    if (!ticket) throw new NotFoundException("Ticket no existe");
+
+    // ---- REGLA DE ESTADO PARA CHECKOUT ----
     if (ticket.kind === TicketKind.BAR) {
+      // BAR puede ir directo a checkout desde OPEN
       if (ticket.status === TicketStatus.OPEN) {
         await this.prisma.ticket.update({
           where: { id: ticketId },
           data: { status: TicketStatus.CHECKOUT }
         });
+        (ticket as any).status = TicketStatus.CHECKOUT;
       } else if (ticket.status !== TicketStatus.CHECKOUT) {
         throw new BadRequestException("Ticket no listo para cobro");
       }
     } else {
-      // RENTAL: debe venir ya cerrado (CHECKOUT)
+      // RENTAL debe venir ya cerrado
       if (ticket.status !== TicketStatus.CHECKOUT) {
         throw new BadRequestException("Ticket no listo para cobro");
       }
     }
 
-    // Releer ticket para tener estado actualizado (evita hacks tipo "as any")
-    const ticket2 = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
-      include: { items: { include: { product: true } }, table: true, openedBy: true }
-    });
-    if (!ticket2) throw new NotFoundException("Ticket no existe");
+    if (ticket.status === TicketStatus.PAID) throw new BadRequestException("Ya pagado");
 
-    // Recalcular totals SIEMPRE
-    const consumos = ticket2.items.reduce((a, it) => a + it.lineTotal, 0);
-    const rental = ticket2.kind === TicketKind.RENTAL ? (ticket2.rentalAmount ?? 0) : 0;
+    const consumos = ticket.items.reduce((a, it) => a + it.lineTotal, 0);
+    const rental = ticket.kind === TicketKind.RENTAL ? (ticket.rentalAmount ?? 0) : 0;
     const total = roundUp100(rental + consumos);
 
-    // Validar stock (se descuenta al pagar)
-    for (const it of ticket2.items) {
+    for (const it of ticket.items) {
       if (it.product.stock < it.qty) {
         throw new BadRequestException(`Stock insuficiente: ${it.product.name}`);
       }
     }
 
     const paid = await this.prisma.$transaction(async (tx) => {
-      // Descontar stock + movimiento
-      for (const it of ticket2.items) {
+      for (const it of ticket.items) {
         await tx.product.update({
           where: { id: it.productId },
           data: { stock: { decrement: it.qty } }
@@ -167,7 +158,7 @@ export class TicketsService {
             productId: it.productId,
             type: "OUT",
             qty: it.qty,
-            reason: `Venta ticket ${ticket2.id}`,
+            reason: `Venta ticket ${ticket.id}`,
             createdById: userId
           }
         });
@@ -175,14 +166,14 @@ export class TicketsService {
 
       const payment = await tx.payment.create({
         data: {
-          ticketId: ticket2.id,
+          ticketId: ticket.id,
           method: method as any,
           totalAmount: total,
           paidById: userId
         }
       });
 
-      await tx.ticket.update({ where: { id: ticket2.id }, data: { status: TicketStatus.PAID } });
+      await tx.ticket.update({ where: { id: ticket.id }, data: { status: TicketStatus.PAID } });
       return payment;
     });
 
