@@ -7,13 +7,10 @@ import { RolesGuard } from "./roles.guard";
 @Module({
   imports: [
     JwtModule.register({
-      // Puedes dejarlo vacío si usas process.env.JWT_SECRET dentro del guard/service,
-      // pero lo ideal es setearlo aquí:
-      // secret: process.env.JWT_SECRET,
-      // signOptions: { expiresIn: "7d" },
+      secret: process.env.JWT_SECRET, // ✅ usa el env var
     }),
   ],
   providers: [AuthGuard, RolesGuard],
-  exports: [JwtModule, AuthGuard, RolesGuard], // <-- CLAVE
+  exports: [JwtModule, AuthGuard, RolesGuard], // ✅ CLAVE
 })
 export class AuthModule {}
