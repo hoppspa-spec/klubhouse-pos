@@ -48,7 +48,9 @@ export class TicketsService {
   }
 
   async addItem(ticketId: string, productId: string, qtyDelta: number) {
-    if (!Number.isInteger(qtyDelta) || qtyDelta === 0) throw new BadRequestException("qtyDelta inválido");
+    if (!Number.isInteger(qtyDelta) || qtyDelta === 0) {
+      throw new BadRequestException("qtyDelta inválido");
+    }
 
     const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException("Ticket no existe");
@@ -58,7 +60,6 @@ export class TicketsService {
     if (!product || !product.isActive) throw new BadRequestException("Producto inválido");
 
     const existing = await this.prisma.ticketItem.findFirst({ where: { ticketId, productId } });
-
     if (!existing && qtyDelta < 0) return { ok: true };
 
     if (!existing) {
@@ -123,12 +124,13 @@ export class TicketsService {
           where: { id: ticketId },
           data: { status: TicketStatus.CHECKOUT }
         });
+        // mantener coherencia en memoria (evita re-query)
         (ticket as any).status = TicketStatus.CHECKOUT;
       } else if (ticket.status !== TicketStatus.CHECKOUT) {
         throw new BadRequestException("Ticket no listo para cobro");
       }
     } else {
-      // RENTAL debe venir ya cerrado
+      // RENTAL: debe venir ya cerrado (CHECKOUT)
       if (ticket.status !== TicketStatus.CHECKOUT) {
         throw new BadRequestException("Ticket no listo para cobro");
       }
@@ -136,10 +138,12 @@ export class TicketsService {
 
     if (ticket.status === TicketStatus.PAID) throw new BadRequestException("Ya pagado");
 
+    // Recalcular totals SIEMPRE
     const consumos = ticket.items.reduce((a, it) => a + it.lineTotal, 0);
     const rental = ticket.kind === TicketKind.RENTAL ? (ticket.rentalAmount ?? 0) : 0;
     const total = roundUp100(rental + consumos);
 
+    // Validar stock (se descuenta al pagar)
     for (const it of ticket.items) {
       if (it.product.stock < it.qty) {
         throw new BadRequestException(`Stock insuficiente: ${it.product.name}`);
@@ -147,6 +151,7 @@ export class TicketsService {
     }
 
     const paid = await this.prisma.$transaction(async (tx) => {
+      // Descontar stock + movimiento
       for (const it of ticket.items) {
         await tx.product.update({
           where: { id: it.productId },
@@ -190,6 +195,7 @@ export class TicketsService {
         openedBy: true
       }
     });
+
     if (!ticket?.payment) throw new NotFoundException("No hay pago / voucher");
 
     return renderReceipt({
