@@ -42,7 +42,7 @@ enum StockMoveType {
 }
 
 model User {
-  id           String   @id @default(uuid())
+  id           String   @id id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
   username     String   @unique
   name         String
   passwordHash String
@@ -62,7 +62,7 @@ model Table {
 }
 
 model Ticket {
-  id            String       @id @default(uuid())
+  id            String       @id id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
   tableId       Int
   table         Table        @relation(fields: [tableId], references: [id])
   kind          TicketKind
@@ -83,7 +83,7 @@ model Ticket {
 }
 
 model Product {
-  id            String   @id @default(uuid())
+  id            String   @id id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
   name          String   @unique
   category      String
   price         Int
@@ -97,7 +97,7 @@ model Product {
 }
 
 model TicketItem {
-  id        String  @id @default(uuid())
+  id        String  @id id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
   ticketId  String
   ticket    Ticket  @relation(fields: [ticketId], references: [id])
 
@@ -110,7 +110,7 @@ model TicketItem {
 }
 
 model Payment {
-  id            String        @id @default(uuid())
+  id            String        @id id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
   ticketId      String        @unique
   ticket        Ticket        @relation(fields: [ticketId], references: [id])
 
@@ -125,7 +125,7 @@ model Payment {
 }
 
 model StockMovement {
-  id          String        @id @default(uuid())
+  id          String        @id id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
   productId   String
   product     Product       @relation(fields: [productId], references: [id])
 
@@ -135,3 +135,4 @@ model StockMovement {
   createdById String
   createdAt   DateTime      @default(now())
 }
+
