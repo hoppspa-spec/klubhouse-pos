@@ -1,31 +1,30 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ForbiddenException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt'; // o bcryptjs
 import { PrismaService } from '../prisma.service';
-import * as bcrypt from 'bcrypt';
-import * as jwt from 'jsonwebtoken';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwt: JwtService,
+  ) {}
 
   async login(username: string, password: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { username },
-      select: { id: true, username: true, name: true, role: true, isActive: true, passwordHash: true },
-    });
+    const user = await this.prisma.user.findUnique({ where: { username } });
 
-    if (!user || !user.isActive) throw new UnauthorizedException('Invalid credentials');
+    if (!user) throw new UnauthorizedException('Credenciales inválidas');
+    if (!user.isActive) throw new ForbiddenException('Usuario inactivo');
 
     const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) throw new UnauthorizedException('Invalid credentials');
+    if (!ok) throw new UnauthorizedException('Credenciales inválidas');
 
-    const token = jwt.sign(
-      { sub: user.id, role: user.role, username: user.username },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '1d' }
-    );
+    const payload = { sub: user.id, role: user.role, username: user.username };
+
+    const accessToken = await this.jwt.signAsync(payload);
 
     return {
-      token,
+      accessToken,
       user: { id: user.id, username: user.username, name: user.name, role: user.role },
     };
   }
