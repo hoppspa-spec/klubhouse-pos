@@ -26,8 +26,13 @@ services:
     rootDir: .
     plan: starter
     buildCommand: |
-      npm install --include=dev
-      npm run build --workspace apps/web
+      buildCommand: |
+       npm install --include=dev
+       npm run prisma:generate --workspace apps/api
+       npm run prisma:migrate --workspace apps/api
+       npm run build --workspace apps/api
+       npm run prisma:seed --workspace apps/api
+
     startCommand: npm run start --workspace apps/web
     envVars:
       - key: NEXT_PUBLIC_API_URL

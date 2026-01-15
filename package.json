@@ -1,21 +1,34 @@
 {
-  "name": "klubhouse-pos",
+  "name": "klubhouse-pos-api",
   "private": true,
-  "workspaces": ["apps/*"],
   "scripts": {
-    "dev": "npm --workspace apps/api run dev & npm --workspace apps/web run dev",
-    "build": "npm --workspace apps/api run build && npm --workspace apps/web run build"
-  },
-  "devDependencies": {
-    "prisma": "^5.22.0"
+    "dev": "npx nest start --watch",
+    "build": "npx nest build",
+    "start": "node dist/main.js",
+    "prisma:generate": "prisma generate --schema=../../prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate deploy --schema=../../prisma/schema.prisma",
+    "prisma:seed": "prisma db seed --schema=../../prisma/schema.prisma"
   },
   "dependencies": {
-    "@nestjs/jwt": "^11.0.2",
-    "@nestjs/passport": "^11.0.5",
-    "@prisma/client": "^5.22.0",
-    "bcrypt": "^6.0.0",
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/core": "^10.0.0",
+    "@nestjs/jwt": "^10.0.0",
+    "@nestjs/platform-express": "^10.0.0",
+    "@prisma/client": "^5.0.0",
     "bcryptjs": "^2.4.3",
-    "passport": "^0.7.0",
-    "passport-jwt": "^4.0.1"
+    "dotenv": "^17.2.3",
+    "reflect-metadata": "^0.1.13",
+    "rxjs": "^7.8.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^10.0.0",
+    "@nestjs/schematics": "^10.0.0",
+    "@nestjs/testing": "^10.0.0",
+    "prisma": "^5.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
+  },  
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   }
 }
