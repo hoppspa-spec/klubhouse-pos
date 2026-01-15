@@ -1,5 +1,5 @@
 import { PrismaClient, Role, TableType } from "@prisma/client";
-import * as bcrypt from "bcryptjs";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -13,57 +13,57 @@ async function main() {
     { id: 5, name: "MESA 5", type: TableType.POOL },
     { id: 6, name: "MESA 6", type: TableType.POOL },
     { id: 7, name: "MESA 7", type: TableType.POOL },
-    { id: 8, name: "BARRA", type: TableType.BAR }
+    { id: 8, name: "BARRA", type: TableType.BAR },
   ];
 
   for (const t of tables) {
     await prisma.table.upsert({
       where: { id: t.id },
       update: { name: t.name, type: t.type },
-      create: t
+      create: t,
     });
   }
 
-  // 2) Usuario MASTER inicial
-  // Cambia estos valores cuando quieras
-  const username = "admin";
-  const password = "admin1234";
-  const name = "Dueño";
-
-  const passwordHash = await bcrypt.hash(password, 10);
-
-  await prisma.user.upsert({
-    where: { username },
-    update: { name, role: Role.MASTER, isActive: true },
-    create: {
-      username,
-      name,
+  // 2) Usuarios base (MASTER + SLAVE)
+  const users = [
+    {
+      username: process.env.MASTER_USERNAME || "admin",
+      password: process.env.MASTER_PASSWORD || "admin1234",
+      name: process.env.MASTER_NAME || "Dueño",
       role: Role.MASTER,
-      isActive: true,
-      passwordHash
-    }
-  });
-
-  // 3) Productos base (ejemplo)
-  const products = [
-    { name: "Combinado (base)", category: "COMBINADOS", price: 3500, stock: 0, stockCritical: 5 },
-    { name: "Bebida lata", category: "BEBIDAS", price: 1500, stock: 0, stockCritical: 10 },
-    { name: "Agua mineral", category: "AGUA", price: 1200, stock: 0, stockCritical: 10 },
-    { name: "Energética", category: "ENERGETICAS", price: 2000, stock: 0, stockCritical: 10 }
+    },
+    {
+      username: process.env.SLAVE_USERNAME || "manager",
+      password: process.env.SLAVE_PASSWORD || "manager1234",
+      name: process.env.SLAVE_NAME || "Administrador",
+      role: Role.SLAVE,
+    },
   ];
 
-  for (const p of products) {
-    await prisma.product.upsert({
-      where: { name: p.name }, // OJO: esto requiere que Product.name sea unique (ver abajo opción A o B)
-      update: { category: p.category, price: p.price, stockCritical: p.stockCritical, isActive: true },
-      create: { ...p, isActive: true }
+  for (const u of users) {
+    const passwordHash = await bcrypt.hash(u.password, 10);
+
+    await prisma.user.upsert({
+      where: { username: u.username },
+      update: {
+        name: u.name,
+        role: u.role,
+        isActive: true,
+        passwordHash,
+      },
+      create: {
+        username: u.username,
+        name: u.name,
+        role: u.role,
+        isActive: true,
+        passwordHash,
+      },
     });
+
+    console.log(`✅ ${u.role}: ${u.username} / ${u.password}`);
   }
 
-  console.log("✅ Seed listo:");
-  console.log("- Mesas 1..7 POOL, 8 BAR");
-  console.log(`- Usuario MASTER: ${username} / ${password}`);
-  console.log("- Productos base creados");
+  console.log("🔥 Seed COMPLETO");
 }
 
 main()

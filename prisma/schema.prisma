@@ -42,16 +42,17 @@ enum StockMoveType {
 }
 
 model User {
-  id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
-  username String @unique
-  name String
+  id           String   @id @default(cuid())
+  username     String   @unique
+  name         String
   passwordHash String
-  role Role
-  isActive Boolean  @default(true)
-  createdAt DateTime @default(now())
+  role         Role     @default(SELLER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   openedTickets Ticket[]  @relation("OpenedBy")
-  paidPayments  Payment[] @relation("PaidBy")
+  payments      Payment[] @relation("PaidBy")
 }
 
 model Table {
@@ -62,11 +63,11 @@ model Table {
 }
 
 model Ticket {
-  id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
-  tableId Int
-  table Table @relation(fields: [tableId], references: [id])
-  kind TicketKind
-  status TicketStatus @default(OPEN)
+  id            String       @id @default(cuid())
+  tableId       Int
+  table         Table        @relation(fields: [tableId], references: [id])
+  kind          TicketKind
+  status        TicketStatus @default(OPEN)
 
   openedById    String
   openedBy      User         @relation("OpenedBy", fields: [openedById], references: [id])
@@ -83,23 +84,23 @@ model Ticket {
 }
 
 model Product {
-  id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
-  name String @unique
-  category String
-  price Int
-  stock Int @default(0)
-  stockCritical Int @default(0)
-  isActive Boolean @default(true)
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  name          String   @unique
+  category      String
+  price         Int
+  stock         Int      @default(0)
+  stockCritical Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
 
-  items         TicketItem[]
-  stockMoves    StockMovement[]
+  items      TicketItem[]
+  stockMoves StockMovement[]
 }
 
 model TicketItem {
-  id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
-  ticketId String
-  ticket Ticket  @relation(fields: [ticketId], references: [id])
+  id        String  @id @default(cuid())
+  ticketId  String
+  ticket    Ticket  @relation(fields: [ticketId], references: [id])
 
   productId String
   product   Product @relation(fields: [productId], references: [id])
@@ -110,9 +111,9 @@ model TicketItem {
 }
 
 model Payment {
-  id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
-  ticketId String @unique
-  ticket Ticket @relation(fields: [ticketId], references: [id])
+  id            String        @id @default(cuid())
+  ticketId      String        @unique
+  ticket        Ticket        @relation(fields: [ticketId], references: [id])
 
   method        PaymentMethod
   totalAmount   Int
@@ -125,9 +126,9 @@ model Payment {
 }
 
 model StockMovement {
-  id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
-  productId String
-  product Product @relation(fields: [productId], references: [id])
+  id          String        @id @default(cuid())
+  productId   String
+  product     Product       @relation(fields: [productId], references: [id])
 
   type        StockMoveType
   qty         Int
@@ -135,6 +136,5 @@ model StockMovement {
   createdById String
   createdAt   DateTime      @default(now())
 }
-
 
 
