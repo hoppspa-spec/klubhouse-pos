@@ -1,76 +1,35 @@
-import { PrismaClient, Role, TableType } from "@prisma/client";
-import bcrypt from "bcryptjs";
-
-const prisma = new PrismaClient();
-
-async function main() {
-  // 1) Mesas
-  const tables = [
-    { id: 1, name: "MESA 1", type: TableType.POOL },
-    { id: 2, name: "MESA 2", type: TableType.POOL },
-    { id: 3, name: "MESA 3", type: TableType.POOL },
-    { id: 4, name: "MESA 4", type: TableType.POOL },
-    { id: 5, name: "MESA 5", type: TableType.POOL },
-    { id: 6, name: "MESA 6", type: TableType.POOL },
-    { id: 7, name: "MESA 7", type: TableType.POOL },
-    { id: 8, name: "BARRA", type: TableType.BAR },
-  ];
-
-  for (const t of tables) {
-    await prisma.table.upsert({
-      where: { id: t.id },
-      update: { name: t.name, type: t.type },
-      create: t,
-    });
+{
+  "name": "klubhouse-pos-api",
+  "private": true,
+  "scripts": {
+    "build": "npx prisma generate --schema=../../prisma/schema.prisma && npx nest build",
+    "start": "node dist/main.js",
+    "dev": "npx nest start --watch",
+    "prisma:generate": "npx prisma generate --schema=../../prisma/schema.prisma",
+    "prisma:migrate": "npx prisma migrate deploy --schema=../../prisma/schema.prisma",
+    "prisma:seed": "npx prisma db seed --schema=../../prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/core": "^10.0.0",
+    "@nestjs/jwt": "^10.0.0",
+    "@nestjs/platform-express": "^10.0.0",
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^17.2.3",
+    "reflect-metadata": "^0.1.13",
+    "rxjs": "^7.8.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^10.0.0",
+    "@nestjs/schematics": "^10.0.0",
+    "@nestjs/testing": "^10.0.0",
+    "prisma": "^5.22.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
+  },
+  "prisma": {
+    "schema": "../../prisma/schema.prisma",
+    "seed": "ts-node ../../prisma/seed.ts"
   }
-
-  // 2) Usuarios base (MASTER + SLAVE)
-  const users = [
-    {
-      username: process.env.MASTER_USERNAME || "admin",
-      password: process.env.MASTER_PASSWORD || "admin1234",
-      name: process.env.MASTER_NAME || "Dueño",
-      role: Role.MASTER,
-    },
-    {
-      username: process.env.SLAVE_USERNAME || "manager",
-      password: process.env.SLAVE_PASSWORD || "manager1234",
-      name: process.env.SLAVE_NAME || "Administrador",
-      role: Role.SLAVE,
-    },
-  ];
-
-  for (const u of users) {
-    const passwordHash = await bcrypt.hash(u.password, 10);
-
-    await prisma.user.upsert({
-      where: { username: u.username },
-      update: {
-        name: u.name,
-        role: u.role,
-        isActive: true,
-        passwordHash,
-      },
-      create: {
-        username: u.username,
-        name: u.name,
-        role: u.role,
-        isActive: true,
-        passwordHash,
-      },
-    });
-
-    console.log(`✅ ${u.role}: ${u.username} / ${u.password}`);
-  }
-
-  console.log("🔥 Seed COMPLETO");
 }
-
-main()
-  .catch((e) => {
-    console.error("❌ Seed falló:", e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
