@@ -1,31 +1,42 @@
-import { Injectable, UnauthorizedException, ForbiddenException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt'; // o bcryptjs
-import { PrismaService } from '../prisma.service';
+import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
+
+const prisma = new PrismaClient();
 
 @Injectable()
 export class AuthService {
-  constructor(
-    private prisma: PrismaService,
-    private jwt: JwtService,
-  ) {}
+  constructor(private jwtService: JwtService) {}
 
   async login(username: string, password: string) {
-    const user = await this.prisma.user.findUnique({ where: { username } });
+    const user = await prisma.user.findUnique({
+      where: { username },
+    });
 
-    if (!user) throw new UnauthorizedException('Credenciales inválidas');
-    if (!user.isActive) throw new ForbiddenException('Usuario inactivo');
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException("Credenciales inválidas");
+    }
 
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) throw new UnauthorizedException('Credenciales inválidas');
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      throw new UnauthorizedException("Credenciales inválidas");
+    }
 
-    const payload = { sub: user.id, role: user.role, username: user.username };
+    const payload = {
+      sub: user.id,
+      role: user.role,
+    };
 
-    const accessToken = await this.jwt.signAsync(payload);
+    const accessToken = this.jwtService.sign(payload);
 
     return {
       accessToken,
-      user: { id: user.id, username: user.username, name: user.name, role: user.role },
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+      },
     };
   }
 }
