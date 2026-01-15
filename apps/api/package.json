@@ -8,10 +8,6 @@
     "prisma:generate": "prisma generate --schema=../../prisma/schema.prisma",
     "prisma:migrate": "prisma migrate deploy --schema=../../prisma/schema.prisma",
     "prisma:seed": "prisma db seed --schema=../../prisma/schema.prisma"
-    "prisma": {
-    "seed": "ts-node ../../prisma/seed.ts"
-  }
-
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
@@ -33,7 +29,7 @@
     "typescript": "^5.0.0"
   },
   "prisma": {
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "ts-node ../../prisma/seed.ts"
   }
 }
 
