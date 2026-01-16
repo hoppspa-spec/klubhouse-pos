@@ -1,22 +1,14 @@
+# Next.js
+apps/web/.next/
+apps/web/next-env.d.ts
+apps/web/tsconfig.json
+
 # Node
-node_modules
-dist
-build
-.next
+node_modules/
 
 # Env
 .env
-.env.local
-.env.*.local
+.env.*
 
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Next.js
-.next
+# Nest build
+apps/api/dist/
