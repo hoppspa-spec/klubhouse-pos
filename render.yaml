@@ -2,7 +2,7 @@ services:
   - type: web
     name: klubhouse-pos-api
     env: node
-    rootDir: .
+    rootDir: apps/api
     plan: starter
     buildCommand: |
       npm install --include=dev
@@ -23,7 +23,7 @@ services:
   - type: web
     name: klubhouse-pos-web
     env: node
-    rootDir: .
+    rootDir: apps/web
     plan: starter
     buildCommand: |
       buildCommand: |
