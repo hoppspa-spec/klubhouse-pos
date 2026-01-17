@@ -4,8 +4,10 @@
   "workspaces": ["apps/*"],
   "scripts": {
     "dev": "npm --workspace apps/api run dev & npm --workspace apps/web run dev",
-    "build": "npm --workspace apps/api run build && npm --workspace apps/web run build"
-  },
+    "build": "npm --workspace apps/api run build && npm --workspace apps/web run build",
+    "api:start": "npm --workspace apps/api run start",
+    "api:prisma:migrate": "npm --workspace apps/api run prisma:migrate"
+      },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
