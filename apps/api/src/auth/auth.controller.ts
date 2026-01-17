@@ -1,13 +1,19 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import { Module } from "@nestjs/common";
+import { JwtModule } from "@nestjs/jwt";
+import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
+import { AuthGuard } from "./auth.guard";
+import { RolesGuard } from "./roles.guard";
 
-@Controller("auth")
-export class AuthController {
-  constructor(private auth: AuthService) {}
-
-  @Post("login")
-  login(@Body() body: { username: string; password: string }) {
-    return this.auth.login(body.username, body.password);
-  }
-}
+@Module({
+  imports: [
+    JwtModule.register({
+      secret: process.env.JWT_SECRET,
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [AuthService, AuthGuard, RolesGuard],
+  exports: [JwtModule, AuthGuard, RolesGuard],
+})
+export class AuthModule {}
 
