@@ -1,12 +1,10 @@
-import { Module } from "@nestjs/common";
-import { TicketsController } from "./tickets.controller";
-import { TicketsService } from "./tickets.service";
-import { AuthModule } from "../auth/auth.module";
+import { Global, Module } from "@nestjs/common";
+import { PrismaService } from "../prisma.service";
 
+@Global()
 @Module({
-  imports: [AuthModule],
-  controllers: [TicketsController],
-  providers: [TicketsService],
+  providers: [PrismaService],
+  exports: [PrismaService],
 })
-export class TicketsModule {}
+export class PrismaModule {}
 
