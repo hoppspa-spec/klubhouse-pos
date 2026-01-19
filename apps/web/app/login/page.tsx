@@ -14,8 +14,7 @@ export default function LoginPage() {
     setErr(null);
     try {
       const out = await login(username, password);
-      localStorage.setItem("accessToken", out.accessToken);
-      localStorage.setItem("user", JSON.stringify(out.user));
+      localStorage.setItem("accessToken", out.access_token);
       r.replace("/tables");
     } catch {
       setErr("Usuario o clave incorrecta.");
