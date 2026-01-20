@@ -1,35 +1,36 @@
-{
-  "name": "klubhouse-pos-api",
-  "private": true,
-  "scripts": {
-    "build": "npx prisma generate --schema=../../prisma/schema.prisma && npx nest build",
-    "start": "node dist/main.js",
-    "dev": "npx nest start --watch",
-    "prisma:generate": "npx prisma generate --schema=../../prisma/schema.prisma",
-    "prisma:migrate": "npx prisma migrate deploy --schema=../../prisma/schema.prisma",
-    "prisma:seed": "npx prisma db seed --schema=../../prisma/schema.prisma"
-  },
-  "dependencies": {
-    "@nestjs/common": "^10.0.0",
-    "@nestjs/core": "^10.0.0",
-    "@nestjs/jwt": "^10.0.0",
-    "@nestjs/platform-express": "^10.0.0",
-    "@prisma/client": "^5.22.0",
-    "bcryptjs": "^2.4.3",
-    "dotenv": "^17.2.3",
-    "reflect-metadata": "^0.1.13",
-    "rxjs": "^7.8.0"
-  },
-  "devDependencies": {
-    "@nestjs/cli": "^10.0.0",
-    "@nestjs/schematics": "^10.0.0",
-    "@nestjs/testing": "^10.0.0",
-    "prisma": "^5.22.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.0.0"
-  },
-  "prisma": {
-    "schema": "../../prisma/schema.prisma",
-    "seed": "ts-node ../../prisma/seed.ts"
-  }
+const { PrismaClient } = require("@prisma/client");
+const bcrypt = require("bcryptjs");
+
+const prisma = new PrismaClient();
+
+async function main() {
+  const adminPass = process.env.MASTER_PASSWORD || "admin1234";
+  const managerPass = process.env.SLAVE_PASSWORD || "admin1234";
+
+  const adminHash = await bcrypt.hash(adminPass, 10);
+  const managerHash = await bcrypt.hash(managerPass, 10);
+
+  await prisma.user.upsert({
+    where: { username: "admin" },
+    update: { passwordHash: adminHash, isActive: true, role: "MASTER", name: "Dueño" },
+    create: { username: "admin", passwordHash: adminHash, isActive: true, role: "MASTER", name: "Dueño" },
+  });
+
+  await prisma.user.upsert({
+    where: { username: "manager" },
+    update: { passwordHash: managerHash, isActive: true, role: "SLAVE", name: "Administrador" },
+    create: { username: "manager", passwordHash: managerHash, isActive: true, role: "SLAVE", name: "Administrador" },
+  });
+
+  console.log("Seed OK: admin/manager reseteados");
 }
+
+main()
+  .catch((e) => {
+    console.error("Seed FAIL:", e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
+
