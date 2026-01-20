@@ -14,7 +14,14 @@ export default function LoginPage() {
     setErr(null);
     try {
       const out = await login(username, password);
+      console.log("LOGIN OUT =>", out);
+
+      // el backend devuelve access_token
       localStorage.setItem("accessToken", out.access_token);
+
+      // opcional: si no estás devolviendo user, no lo guardes
+      // localStorage.setItem("user", JSON.stringify(out.user));
+
       r.replace("/tables");
     } catch {
       setErr("Usuario o clave incorrecta.");
