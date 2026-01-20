@@ -8,6 +8,13 @@
     "api:start": "npm --workspace apps/api run start",
     "api:prisma:migrate": "npm --workspace apps/api run prisma:migrate",
     "api:prisma:seed": "npm --workspace apps/api run prisma:seed"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "@types/node": "^25.0.9"
   }
 }
-
