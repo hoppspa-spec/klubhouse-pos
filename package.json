@@ -8,26 +8,6 @@
     "api:start": "npm --workspace apps/api run start",
     "api:prisma:migrate": "npm --workspace apps/api run prisma:migrate",
     "api:prisma:seed": "npm --workspace apps/api run prisma:seed"
-  },
-  "dependencies": {
-    "@nestjs/common": "^10.0.0",
-    "@nestjs/core": "^10.0.0",
-    "@nestjs/jwt": "^10.0.0",
-    "@nestjs/platform-express": "^10.0.0",
-    "@prisma/client": "^5.0.0",
-    "bcryptjs": "^2.4.3",
-    "dotenv": "^17.2.3",
-    "reflect-metadata": "^0.1.13",
-    "rxjs": "^7.8.0"
-  },
-  "devDependencies": {
-    "@nestjs/cli": "^10.0.0",
-    "@nestjs/schematics": "^10.0.0",
-    "@nestjs/testing": "^10.0.0",
-    "prisma": "^5.0.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.0.0"
-  },
-    
+  }
 }
 
