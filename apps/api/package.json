@@ -6,10 +6,10 @@
     "build": "npx prisma generate --schema=../../prisma/schema.prisma && node ../../node_modules/@nestjs/cli/bin/nest.js build",
     "start": "node dist/main.js",
     "prisma:generate": "npx prisma generate --schema=../../prisma/schema.prisma",
-    "prisma:migrate": "npx prisma migrate deploy --schema=../../prisma/schema.prisma",
-    "prisma": {
-      "seed": "node ../../prisma/seed.js"
-    }
+    "prisma:migrate": "npx prisma migrate deploy --schema=../../prisma/schema.prisma"
+  },
+  "prisma": {
+    "seed": "node ../../prisma/seed.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
@@ -31,6 +31,7 @@
     "typescript": "^5.0.0"
   }
 }
+
 
 
 
