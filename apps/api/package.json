@@ -3,11 +3,11 @@
   "private": true,
   "scripts": {
     "dev": "node ../../node_modules/@nestjs/cli/bin/nest.js start --watch",
-    "build": "prisma generate --schema=../../prisma/schema.prisma && node ../../node_modules/@nestjs/cli/bin/nest.js build",
+    "build": "npx prisma generate --schema=../../prisma/schema.prisma && node ../../node_modules/@nestjs/cli/bin/nest.js build",
     "start": "node dist/main.js",
-    "prisma:generate": "prisma generate --schema=../../prisma/schema.prisma",
-    "prisma:migrate": "prisma migrate deploy --schema=../../prisma/schema.prisma",
-    "prisma:seed": "prisma db seed --schema=../../prisma/schema.prisma"
+    "prisma:generate": "npx prisma generate --schema=../../prisma/schema.prisma",
+    "prisma:migrate": "npx prisma migrate deploy --schema=../../prisma/schema.prisma",
+    "prisma:seed": "npx prisma db seed --schema=../../prisma/schema.prisma"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
@@ -27,9 +27,9 @@
     "prisma": "^5.22.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.0.0"
-  },
-  
+  }
 }
+
 
 
 
