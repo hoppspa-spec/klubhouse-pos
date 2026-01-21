@@ -1,5 +1,5 @@
 services:
-  - type: web
+  - type: api
     name: klubhouse-pos-api
     env: node
     rootDir: apps/api
