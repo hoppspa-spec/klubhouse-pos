@@ -1,4 +1,3 @@
-cat > package.json <<'EOF'
 {
   "name": "klubhouse-pos",
   "private": true,
@@ -19,4 +18,3 @@ cat > package.json <<'EOF'
     "seed": "ts-node prisma/seed.ts"
   }
 }
-EOF
