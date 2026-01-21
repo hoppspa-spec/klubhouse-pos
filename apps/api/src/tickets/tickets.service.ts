@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { PrismaService } from "../prisma.service";
+import { PrismaService } from "../prisma/prisma.service";
 import { TicketKind, TicketStatus } from "@prisma/client";
 import { calcMinutes, calcRental, roundUp100 } from "./pricing";
 import { renderReceipt } from "./receipt";
