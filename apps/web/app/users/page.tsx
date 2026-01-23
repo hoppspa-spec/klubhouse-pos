@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { createUser, listUsers, setUserActive, setUserPassword } from "../../lib/users";
 
+await setUserActive(u.id, !u.isActive);
+
+
 type Role = "MASTER" | "SLAVE" | "SELLER";
+
 
 type UserRow = {
   id: string;
