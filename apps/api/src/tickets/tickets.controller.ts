@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Req, Res, UseGuards } from "@nestjs/common";
-import { Response, Request } from "express";
+import { Response } from "express";
 import { TicketsService } from "./tickets.service";
 import { AuthGuard } from "../auth/auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
@@ -11,6 +11,7 @@ import { Role } from "@prisma/client";
 export class TicketsController {
   constructor(private svc: TicketsService) {}
 
+  // ✅ ESTE ES EL ENDPOINT QUE EL POS USA PARA “MESAS + TICKET”
   @Get("tables")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
   tables() {
@@ -49,3 +50,4 @@ export class TicketsController {
     return res.send(html);
   }
 }
+
