@@ -38,6 +38,24 @@ export default function UsersPage() {
     }
   }, []);
 
+  async function load() {
+    setErr(null);
+    setLoading(true);
+    try {
+      const data = await listUsers();
+      setUsers(data);
+    } catch (e: any) {
+      console.error(e);
+      setErr(e?.message || "Error cargando usuarios");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
   async function onCreateSeller() {
     setErr(null);
     setLoading(true);
@@ -58,44 +76,6 @@ export default function UsersPage() {
       setLoading(false);
     }
   }
-
-  async function onResetPassword() {
-    setErr(null);
-    setLoading(true);
-    try {
-      if (!pwUserId || !pwNew) {
-        setErr("Selecciona usuario y escribe nueva clave.");
-        return;
-      }
-      await setUserPassword(pwUserId, pwNew);
-      setPwUserId("");
-      setPwNew("");
-      await load();
-    } catch (e: any) {
-      console.error(e);
-      setErr(e?.message || "Error cambiando clave");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function load() {
-    setErr(null);
-    setLoading(true);
-    try {
-      const data = await listUsers();
-      setUsers(data);
-    } catch (e: any) {
-      console.error(e);
-      setErr(e?.message || "Error cargando usuarios");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
 
   async function onToggle(u: UserRow) {
     setErr(null);
@@ -197,9 +177,25 @@ export default function UsersPage() {
 
         <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
           {users.map((u) => (
-            <div key={u.id} style={{ border: "1px solid #222", borderRadius: 12, padding: 12, display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+            <div
+              key={u.id}
+              style={{
+                border: "1px solid #222",
+                borderRadius: 12,
+                padding: 12,
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "center",
+              }}
+            >
               <div>
-                <div style={{ fontWeight: 900 }}>{u.username} <span style={{ color: "#bdbdbd", fontWeight: 600 }}>({u.role})</span></div>
+                <div style={{ fontWeight: 900 }}>
+                  {u.username}{" "}
+                  <span style={{ color: "#bdbdbd", fontWeight: 600 }}>
+                    ({u.role})
+                  </span>
+                </div>
                 <div style={{ color: "#bdbdbd", fontSize: 12 }}>{u.name}</div>
               </div>
 
@@ -270,3 +266,4 @@ function btnDanger(): React.CSSProperties {
     whiteSpace: "nowrap",
   };
 }
+
