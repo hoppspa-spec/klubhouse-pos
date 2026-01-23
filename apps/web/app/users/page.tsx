@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { createUser, listUsers, setUserActive, setUserPassword } from "../../lib/users";
 
-await setUserActive(u.id, !u.isActive);
+async function onToggle(u: UserRow) {
+  await setUserActive(u.id, !u.isActive);
+  await load();
+}
 
 
 type Role = "MASTER" | "SLAVE" | "SELLER";
