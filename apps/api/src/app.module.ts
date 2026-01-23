@@ -1,16 +1,13 @@
 import { Module } from "@nestjs/common";
-import { TablesModule } from "./tables/tables.module";
-
-// Si tienes AuthModule en tu proyecto (seguro, porque el login te funcionaba),
-// descomenta esta línea y agrégalo en imports.
-// import { AuthModule } from "./auth/auth.module";
+import { AuthController } from "./auth.controller";
+import { AuthService } from "./auth.service";
+import { PrismaService } from "../prisma/prisma.service";
+import { JwtModule } from "@nestjs/jwt";
 
 @Module({
-  imports: [
-    // AuthModule,
-    TablesModule,
-  ],
-  controllers: [],
-  providers: [],
+  imports: [JwtModule.register({})],
+  controllers: [AuthController],
+  providers: [AuthService, PrismaService],
 })
-export class AppModule {}
+export class AuthModule {}
+
