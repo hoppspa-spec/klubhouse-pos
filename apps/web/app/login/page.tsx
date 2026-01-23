@@ -17,12 +17,17 @@ export default function LoginPage() {
       console.log("LOGIN OUT =>", out);
 
       // el backend devuelve access_token
-      localStorage.setItem("accessToken", out.access_token);
+      const token = out?.accessToken ?? out?.access_token;
+      if (!token || token === "undefined") throw new Error("Token inválido en respuesta de login");
+        throw new Error("Token inválido en respuesta de login");
+      }
 
-      // opcional: si no estás devolviendo user, no lo guardes
-      // localStorage.setItem("user", JSON.stringify(out.user));
+      localStorage.setItem("accessToken", token);
+      if (out?.user) localStorage.setItem("user", JSON.stringify(out.user));
 
-      r.replace("/tables");
+
+            r.replace("/tables");
+            
     } catch {
       setErr("Usuario o clave incorrecta.");
     }
