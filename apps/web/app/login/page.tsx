@@ -26,8 +26,8 @@ export default function LoginPage() {
       if (out?.user) localStorage.setItem("user", JSON.stringify(out.user));
 
 
-            r.replace("/tables");
-            
+      r.replace("/tables");
+
     } catch {
       setErr("Usuario o clave incorrecta.");
     }
