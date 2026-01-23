@@ -1,4 +1,5 @@
 "use client";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "../../lib/auth";
@@ -12,32 +13,54 @@ export default function LoginPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
+
     try {
       const out = await login(username, password);
       console.log("LOGIN OUT =>", out);
 
-      // el backend devuelve access_token
+      // backend debería devolver accessToken (camelCase). Dejamos fallback por si acaso.
       const token = out?.accessToken ?? out?.access_token;
-      if (!token || token === "undefined") throw new Error("Token inválido en respuesta de login");
+
+      if (!token || token === "undefined") {
         throw new Error("Token inválido en respuesta de login");
       }
 
       localStorage.setItem("accessToken", token);
       if (out?.user) localStorage.setItem("user", JSON.stringify(out.user));
 
-
       r.replace("/tables");
-
-    } catch {
+    } catch (e) {
+      console.error(e);
+      localStorage.removeItem("accessToken");
       setErr("Usuario o clave incorrecta.");
     }
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", display: "grid", placeItems: "center", padding: 20 }}>
-      <form onSubmit={onSubmit} style={{ width: "min(420px, 100%)", background: "#0d0d0d", border: "2px solid #f5c400", borderRadius: 18, padding: 18 }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#060606",
+        color: "#fff",
+        display: "grid",
+        placeItems: "center",
+        padding: 20,
+      }}
+    >
+      <form
+        onSubmit={onSubmit}
+        style={{
+          width: "min(420px, 100%)",
+          background: "#0d0d0d",
+          border: "2px solid #f5c400",
+          borderRadius: 18,
+          padding: 18,
+        }}
+      >
         <div style={{ fontWeight: 900, fontSize: 18 }}>KLUB HOUSE · POS</div>
-        <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>Ingreso de usuario</div>
+        <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
+          Ingreso de usuario
+        </div>
 
         <div style={{ marginTop: 14 }}>
           <label style={{ fontSize: 12, color: "#bdbdbd" }}>Usuario</label>
@@ -46,12 +69,19 @@ export default function LoginPage() {
 
         <div style={{ marginTop: 10 }}>
           <label style={{ fontSize: 12, color: "#bdbdbd" }}>Clave</label>
-          <input type="password" value={password} onChange={(e) => setP(e.target.value)} style={inp()} />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setP(e.target.value)}
+            style={inp()}
+          />
         </div>
 
         {err && <div style={{ marginTop: 10, color: "#ff4d4d", fontSize: 13 }}>{err}</div>}
 
-        <button type="submit" style={btn()}>Entrar</button>
+        <button type="submit" style={btn()}>
+          Entrar
+        </button>
       </form>
     </div>
   );
@@ -69,6 +99,7 @@ function inp(): React.CSSProperties {
     outline: "none",
   };
 }
+
 function btn(): React.CSSProperties {
   return {
     width: "100%",
@@ -82,3 +113,4 @@ function btn(): React.CSSProperties {
     cursor: "pointer",
   };
 }
+
