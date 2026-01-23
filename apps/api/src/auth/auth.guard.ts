@@ -9,10 +9,15 @@ export class AuthGuard implements CanActivate {
     const req = ctx.switchToHttp().getRequest();
     const auth = req.headers["authorization"] || "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-    if (!token) throw new UnauthorizedException("Missing token");
+
+    if (!token || token === "undefined") {
+      throw new UnauthorizedException("Missing token");
+    }
 
     try {
-      const payload = this.jwt.verify(token, { secret: process.env.JWT_SECRET });
+      const payload = this.jwt.verify(token, {
+        secret: process.env.JWT_SECRET || "dev_secret_123",
+      });
       req.user = payload;
       return true;
     } catch {
@@ -20,3 +25,4 @@ export class AuthGuard implements CanActivate {
     }
   }
 }
+
