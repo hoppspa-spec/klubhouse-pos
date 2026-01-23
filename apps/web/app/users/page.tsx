@@ -3,14 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createUser, listUsers, setUserActive, setUserPassword } from "../../lib/users";
 
-async function onToggle(u: UserRow) {
-  await setUserActive(u.id, !u.isActive);
-  await load();
-}
-
-
 type Role = "MASTER" | "SLAVE" | "SELLER";
-
 
 type UserRow = {
   id: string;
@@ -45,6 +38,47 @@ export default function UsersPage() {
     }
   }, []);
 
+  async function onCreateSeller() {
+    setErr(null);
+    setLoading(true);
+    try {
+      if (!username || !name || !password) {
+        setErr("Completa usuario, nombre y clave.");
+        return;
+      }
+      await createUser({ username, name, password, role: "SELLER" });
+      setU("");
+      setN("");
+      setP("");
+      await load();
+    } catch (e: any) {
+      console.error(e);
+      setErr(e?.message || "Error creando vendedor");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onResetPassword() {
+    setErr(null);
+    setLoading(true);
+    try {
+      if (!pwUserId || !pwNew) {
+        setErr("Selecciona usuario y escribe nueva clave.");
+        return;
+      }
+      await setUserPassword(pwUserId, pwNew);
+      setPwUserId("");
+      setPwNew("");
+      await load();
+    } catch (e: any) {
+      console.error(e);
+      setErr(e?.message || "Error cambiando clave");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function load() {
     setErr(null);
     setLoading(true);
@@ -62,25 +96,6 @@ export default function UsersPage() {
   useEffect(() => {
     load();
   }, []);
-
-  async function onCreateSeller() {
-    setErr(null);
-    setLoading(true);
-    try {
-      if (!username || !name || !password) {
-        setErr("Completa usuario, nombre y clave.");
-        return;
-      }
-      await createUser({ username, name, password, role: "SELLER" });
-      setU(""); setN(""); setP("");
-      await load();
-    } catch (e: any) {
-      console.error(e);
-      setErr(e?.message || "Error creando vendedor");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function onToggle(u: UserRow) {
     setErr(null);
