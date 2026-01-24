@@ -7,6 +7,18 @@ type TableState = { id: number; name: string; type: "POOL" | "BAR"; ticket: any 
 
 export default function TablesPage() {
   const r = useRouter();
+  async function goTable(t: TableState) {
+    if (t.ticket?.id) {
+      r.push(`/tickets/${t.ticket.id}`);
+      return;
+    }
+    // abrir ticket y después ir
+    await api("/tickets/open", { method: "POST", body: JSON.stringify({ tableId: t.id }) });
+    const data = await api<TableState[]>("/tables");
+    const opened = data.find(x => x.id === t.id)?.ticket;
+    if (opened?.id) r.push(`/tickets/${opened.id}`);
+    else setErr("No pude abrir el ticket.");
+  }
   const [tables, setTables] = useState<TableState[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
