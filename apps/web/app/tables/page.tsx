@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
@@ -7,18 +8,6 @@ type TableState = { id: number; name: string; type: "POOL" | "BAR"; ticket: any 
 
 export default function TablesPage() {
   const r = useRouter();
-  async function goTable(t: TableState) {
-    if (t.ticket?.id) {
-      r.push(`/tickets/${t.ticket.id}`);
-      return;
-    }
-    // abrir ticket y después ir
-    await api("/tickets/open", { method: "POST", body: JSON.stringify({ tableId: t.id }) });
-    const data = await api<TableState[]>("/tables");
-    const opened = data.find(x => x.id === t.id)?.ticket;
-    if (opened?.id) r.push(`/tickets/${opened.id}`);
-    else setErr("No pude abrir el ticket.");
-  }
   const [tables, setTables] = useState<TableState[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
@@ -27,7 +16,8 @@ export default function TablesPage() {
       setErr(null);
       const data = await api<TableState[]>("/tables");
       setTables(data);
-    } catch {
+    } catch (e) {
+      console.error(e);
       setErr("No pude cargar mesas. Revisa login/API.");
     }
   }
@@ -38,9 +28,33 @@ export default function TablesPage() {
     return () => clearInterval(t);
   }, []);
 
-  async function open(tableId: number) {
-    await api("/tickets/open", { method: "POST", body: JSON.stringify({ tableId }) });
-    refresh();
+  async function goTable(t: TableState) {
+    try {
+      setErr(null);
+
+      // si ya hay ticket, ir directo
+      if (t.ticket?.id) {
+        r.push(`/tickets/${t.ticket.id}`);
+        return;
+      }
+
+      // abrir ticket
+      await api("/tickets/open", {
+        method: "POST",
+        body: JSON.stringify({ tableId: t.id }),
+      });
+
+      // recargar mesas y obtener ticket recién creado
+      const data = await api<TableState[]>("/tables");
+      setTables(data);
+
+      const opened = data.find((x) => x.id === t.id)?.ticket;
+      if (opened?.id) r.push(`/tickets/${opened.id}`);
+      else setErr("No pude abrir el ticket.");
+    } catch (e) {
+      console.error(e);
+      setErr("No pude abrir/entrar a la mesa.");
+    }
   }
 
   function logout() {
@@ -105,28 +119,22 @@ export default function TablesPage() {
                 {busy ? `Activo: ${t.ticket.kind} · ${t.ticket.status}` : "Libre"}
               </div>
 
-              {!busy ? (
-                <button
-                  onClick={() => open(t.id)}
-                  style={{
-                    marginTop: 12,
-                    width: "100%",
-                    borderRadius: 14,
-                    border: "none",
-                    background: "#f5c400",
-                    color: "#000",
-                    fontWeight: 900,
-                    padding: "10px 12px",
-                    cursor: "pointer",
-                  }}
-                >
-                  {t.type === "BAR" ? "Abrir ticket barra" : "Iniciar arriendo"}
-                </button>
-              ) : (
-                <div style={{ marginTop: 12, color: "#bdbdbd", fontSize: 12 }}>
-                  (Siguiente: vista detalle ticket + consumos + cobro)
-                </div>
-              )}
+              <button
+                onClick={() => goTable(t)}
+                style={{
+                  marginTop: 12,
+                  width: "100%",
+                  borderRadius: 14,
+                  border: "none",
+                  background: "#f5c400",
+                  color: "#000",
+                  fontWeight: 900,
+                  padding: "10px 12px",
+                  cursor: "pointer",
+                }}
+              >
+                {busy ? "Entrar" : t.type === "BAR" ? "Abrir ticket barra" : "Iniciar arriendo"}
+              </button>
             </div>
           );
         })}
@@ -134,4 +142,3 @@ export default function TablesPage() {
     </div>
   );
 }
-
