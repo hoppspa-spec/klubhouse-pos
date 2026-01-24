@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "../../lib/api";
+import { api } from "@/lib/api";
 
 type TableState = { id: number; name: string; type: "POOL" | "BAR"; ticket: any | null };
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createUser, listUsers, setUserActive, setUserPassword } from "../../lib/users";
+import { createUser, listUsers, setUserActive, setUserPassword } from "@/lib/users";
 
 type Role = "MASTER" | "SLAVE" | "SELLER";
 
