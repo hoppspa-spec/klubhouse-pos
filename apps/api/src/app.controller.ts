@@ -6,4 +6,9 @@ export class AppController {
   health() {
     return { ok: true };
   }
+
+  @Get("__routes")
+  routes() {
+    return { ok: true };
+  }
 }
