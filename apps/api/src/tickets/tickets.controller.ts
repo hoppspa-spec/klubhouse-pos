@@ -36,10 +36,10 @@ export class TicketsController {
     return this.svc.closeRental(id);
   }
 
-  @Post("tickets/:id/checkout")
+  @Get("tickets/:id")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
-  checkout(@Req() req: any, @Param("id") id: string, @Body() body: { method: "CASH" | "DEBIT" }) {
-    return this.svc.checkout(id, req.user.sub, body.method);
+  getOne(@Param("id") id: string) {
+    return this.svc.getTicket(id);
   }
 
   @Get("tickets/:id/receipt")

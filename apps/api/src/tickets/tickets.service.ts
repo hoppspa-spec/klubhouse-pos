@@ -85,6 +85,27 @@ export class TicketsService {
     });
   }
 
+  async getTicket(ticketId: string) {
+  const ticket = await this.prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        table: true,
+        openedBy: true,
+        items: { include: { product: true } },
+        payment: true,
+      },
+    });
+
+    if (!ticket) throw new NotFoundException("Ticket no existe");
+
+    const consumos = ticket.items.reduce((a, it) => a + it.lineTotal, 0);
+    const rental = ticket.kind === TicketKind.RENTAL ? (ticket.rentalAmount ?? 0) : 0;
+    const total = roundUp100(rental + consumos);
+
+    return { ticket, totals: { consumos, rental, total } };
+  }
+
+
   async closeRental(ticketId: string) {
     const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException("Ticket no existe");
