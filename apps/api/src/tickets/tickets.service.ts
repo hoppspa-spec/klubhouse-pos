@@ -3,7 +3,6 @@ import { PrismaService } from "../prisma/prisma.service";
 import { TicketKind, TicketStatus } from "@prisma/client";
 import { calcMinutes, calcRental, roundUp100 } from "./pricing";
 import { renderReceipt } from "./receipt";
-import { NotFoundException } from "@nestjs/common";
 
 @Injectable()
 export class TicketsService {
