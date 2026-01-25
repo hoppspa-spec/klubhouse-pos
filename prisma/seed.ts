@@ -1,36 +1,32 @@
-const { PrismaClient } = require("@prisma/client");
-const bcrypt = require("bcryptjs");
-
+import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
-  const adminPass = process.env.MASTER_PASSWORD || "admin1234";
-  const managerPass = process.env.SLAVE_PASSWORD || "admin1234";
+  await prisma.product.createMany({
+    data: [
+      { name: "Bebida", category: "BEBIDAS", price: 1200, stock: 999, isActive: true },
+      { name: "Cigarros", category: "CIGARRILLOS", price: 300, stock: 999, isActive: true },
 
-  const adminHash = await bcrypt.hash(adminPass, 10);
-  const managerHash = await bcrypt.hash(managerPass, 10);
+      { name: "Heineken", category: "CERVEZAS", price: 1800, stock: 999, isActive: true },
+      { name: "Cristal", category: "CERVEZAS", price: 1800, stock: 999, isActive: true },
+      { name: "Escudo", category: "CERVEZAS", price: 1800, stock: 999, isActive: true },
+      { name: "Budweiser", category: "CERVEZAS", price: 1800, stock: 999, isActive: true },
 
-  await prisma.user.upsert({
-    where: { username: "admin" },
-    update: { passwordHash: adminHash, isActive: true, role: "MASTER", name: "Dueño" },
-    create: { username: "admin", passwordHash: adminHash, isActive: true, role: "MASTER", name: "Dueño" },
+      { name: "Combinado Johnny + bebida", category: "COMBINADOS", price: 3500, stock: 999, isActive: true },
+      { name: "Combinado Johnny + energética", category: "COMBINADOS", price: 4500, stock: 999, isActive: true },
+      { name: "Combinado Ron + bebida", category: "COMBINADOS", price: 3000, stock: 999, isActive: true },
+    ],
+    skipDuplicates: true,
   });
-
-  await prisma.user.upsert({
-    where: { username: "manager" },
-    update: { passwordHash: managerHash, isActive: true, role: "SLAVE", name: "Administrador" },
-    create: { username: "manager", passwordHash: managerHash, isActive: true, role: "SLAVE", name: "Administrador" },
-  });
-
-  console.log("Seed OK: admin/manager reseteados");
 }
 
 main()
   .catch((e) => {
-    console.error("Seed FAIL:", e);
+    console.error(e);
     process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();
   });
+
 
