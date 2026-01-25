@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { api } from "../../../lib/api";
+import { api, API_URL } from "../../../lib/api";
 
 type Product = { id: string; name: string; category: string; price: number; stock: number };
 type TicketItem = { id: string; productId: string; qty: number; unitPrice: number; lineTotal: number; product: Product };
@@ -101,7 +101,7 @@ export default function TicketPage() {
       });
       await load();
       // abrir voucher
-      window.open(`${process.env.NEXT_PUBLIC_API_URL}/tickets/${ticket.id}/receipt`, "_blank");
+      window.open(`${API_URL}/tickets/${ticket.id}/receipt`, "_blank");
     } catch (e: any) {
       console.error(e);
       setErr(e?.message || "No pude cobrar.");

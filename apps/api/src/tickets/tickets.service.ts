@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { TicketKind, TicketStatus } from "@prisma/client";
 import { calcMinutes, calcRental, roundUp100 } from "./pricing";
 import { renderReceipt } from "./receipt";
+import { NotFoundException } from "@nestjs/common";
 
 @Injectable()
 export class TicketsService {
@@ -85,25 +86,23 @@ export class TicketsService {
     });
   }
 
-  async getTicket(ticketId: string) {
+  async getTicketWithTotals(id: string) {
   const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
-      include: {
-        table: true,
-        openedBy: true,
-        items: { include: { product: true } },
-        payment: true,
-      },
-    });
+    where: { id },
+    include: {
+      table: true,
+      items: { include: { product: true } },
+    },
+  });
 
-    if (!ticket) throw new NotFoundException("Ticket no existe");
+  if (!ticket) throw new NotFoundException("Ticket no existe");
 
-    const consumos = ticket.items.reduce((a, it) => a + it.lineTotal, 0);
-    const rental = ticket.kind === TicketKind.RENTAL ? (ticket.rentalAmount ?? 0) : 0;
-    const total = roundUp100(rental + consumos);
+  const consumos = ticket.items.reduce((acc, it) => acc + Number(it.lineTotal), 0);
+  const rental = Number(ticket.rentalAmount ?? 0);
+  const total = consumos + rental;
 
-    return { ticket, totals: { consumos, rental, total } };
-  }
+  return { ticket, totals: { consumos, rental, total } };
+}
 
 
   async closeRental(ticketId: string) {

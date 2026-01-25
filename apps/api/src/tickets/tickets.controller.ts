@@ -35,11 +35,21 @@ export class TicketsController {
   close(@Param("id") id: string) {
     return this.svc.closeRental(id);
   }
+  
+  @Post("tickets/:id/checkout")
+  @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
+  checkout(
+  @Req() req: any,
+  @Param("id") id: string,
+  @Body() body: { method: "CASH" | "DEBIT" }) {
+    return this.svc.checkout(id, req.user.sub, body.method);
+  }
+
 
   @Get("tickets/:id")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
   getOne(@Param("id") id: string) {
-    return this.svc.getTicket(id);
+    return this.svc.getTicketWithTotals(id);
   }
 
   @Get("tickets/:id/receipt")
@@ -49,5 +59,6 @@ export class TicketsController {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.send(html);
   }
+  
 }
 
