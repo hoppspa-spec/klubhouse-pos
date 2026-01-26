@@ -87,6 +87,20 @@ export default function TablesPage() {
             Usuarios
           </a>
 
+          <a
+            href="/products"
+            style={{
+              color: "#f5c400",
+              fontWeight: 900,
+              textDecoration: "none",
+              border: "1px solid #f5c400",
+              padding: "8px 12px",
+              borderRadius: 12,
+            }}
+          >
+            Productos
+          </a>
+
           <button
             onClick={logout}
             style={{
