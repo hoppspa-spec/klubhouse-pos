@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
@@ -15,22 +15,23 @@ type TableState = {
 
 export default function TablesPage() {
   const r = useRouter();
+
   const [tables, setTables] = useState<TableState[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
 
-  // ✅ leer user/role sin romper SSR
-  const user = useMemo(() => {
-    if (typeof window === "undefined") return null;
+  // ✅ cargar user una sola vez (sin romper SSR)
+  useEffect(() => {
     try {
-      return JSON.parse(localStorage.getItem("user") || "null");
+      setUser(JSON.parse(localStorage.getItem("user") || "null"));
     } catch {
-      return null;
+      setUser(null);
     }
   }, []);
 
   const role: Role | undefined = user?.role;
 
-  // ✅ permisos por rol (tu lógica PRO)
+  // ✅ permisos por rol
   const canUsers = role === "MASTER" || role === "SLAVE";
   const canProducts = role === "MASTER" || role === "SLAVE";
 
@@ -93,6 +94,11 @@ export default function TablesPage() {
         <div>
           <h1 style={{ margin: 0 }}>Mesas & Barra</h1>
           <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>Producción · anti-magia</div>
+          {role && (
+            <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>
+              Rol: <b style={{ color: "#fff" }}>{role}</b>
+            </div>
+          )}
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
