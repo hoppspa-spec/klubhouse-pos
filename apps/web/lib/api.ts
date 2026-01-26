@@ -24,4 +24,10 @@ export async function api<T>(path: string, opts: RequestInit = {}) {
   if (!ct.includes("application/json")) return (await res.text()) as any;
 
   return (await res.json()) as Promise<T>;
+  if (res.status === 401) {
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("user");
+  window.location.href = "/login";
+  throw new Error("Unauthorized");
+}
 }
