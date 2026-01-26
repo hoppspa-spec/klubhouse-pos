@@ -1,40 +1,61 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { CreateProductDto, UpdateProductDto } from "./dto";
 
 @Injectable()
 export class ProductsService {
   constructor(private prisma: PrismaService) {}
 
   list() {
-    return this.prisma.product.findMany({ where: { isActive: true }, orderBy: { category: "asc" } });
+    return this.prisma.product.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] });
   }
 
-  create(body: { name: string; category: string; price: number; stock?: number }) {
-    if (!body.name || !body.category) throw new BadRequestException("name/category requeridos");
-    if (!Number.isFinite(body.price) || body.price <= 0) throw new BadRequestException("price inválido");
+  async create(dto: CreateProductDto) {
+    const name = dto.name?.trim();
+    const category = dto.category?.trim();
 
-    return this.prisma.product.create({
+    if (!name || !category) throw new BadRequestException("name y category son obligatorios");
+    if (!Number.isInteger(dto.price) || dto.price < 0) throw new BadRequestException("price inválido");
+    if (dto.stock != null && (!Number.isInteger(dto.stock) || dto.stock < 0)) throw new BadRequestException("stock inválido");
+    if (dto.stockCritical != null && (!Number.isInteger(dto.stockCritical) || dto.stockCritical < 0))
+      throw new BadRequestException("stockCritical inválido");
+
+    try {
+      return await this.prisma.product.create({
+        data: {
+          name,
+          category,
+          price: dto.price,
+          stock: dto.stock ?? 0,
+          stockCritical: dto.stockCritical ?? 0,
+          isActive: dto.isActive ?? true,
+        },
+      });
+    } catch (e: any) {
+      // por unique name
+      throw new BadRequestException("Ya existe un producto con ese nombre");
+    }
+  }
+
+  async update(id: string, dto: UpdateProductDto) {
+    const exists = await this.prisma.product.findUnique({ where: { id } });
+    if (!exists) throw new NotFoundException("Producto no existe");
+
+    if (dto.price != null && (!Number.isInteger(dto.price) || dto.price < 0)) throw new BadRequestException("price inválido");
+    if (dto.stock != null && (!Number.isInteger(dto.stock) || dto.stock < 0)) throw new BadRequestException("stock inválido");
+    if (dto.stockCritical != null && (!Number.isInteger(dto.stockCritical) || dto.stockCritical < 0))
+      throw new BadRequestException("stockCritical inválido");
+
+    return this.prisma.product.update({
+      where: { id },
       data: {
-        name: body.name,
-        category: body.category,
-        price: Math.trunc(body.price),
-        stock: Math.trunc(body.stock ?? 999),
-        isActive: true,
+        name: dto.name?.trim() ?? undefined,
+        category: dto.category?.trim() ?? undefined,
+        price: dto.price ?? undefined,
+        stock: dto.stock ?? undefined,
+        stockCritical: dto.stockCritical ?? undefined,
+        isActive: dto.isActive ?? undefined,
       },
     });
-  }
-
-  update(id: string, body: { name?: string; category?: string; price?: number; stock?: number; isActive?: boolean }) {
-    const data: any = {};
-    if (body.name !== undefined) data.name = body.name;
-    if (body.category !== undefined) data.category = body.category;
-    if (body.price !== undefined) {
-      if (!Number.isFinite(body.price) || body.price <= 0) throw new BadRequestException("price inválido");
-      data.price = Math.trunc(body.price);
-    }
-    if (body.stock !== undefined) data.stock = Math.trunc(body.stock);
-    if (body.isActive !== undefined) data.isActive = !!body.isActive;
-
-    return this.prisma.product.update({ where: { id }, data });
   }
 }
