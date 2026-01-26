@@ -1,17 +1,12 @@
 import { Module } from "@nestjs/common";
-import { JwtModule } from "@nestjs/jwt";
-import { PrismaModule } from "../prisma/prisma.module";
-import { TicketsController, TicketsPublicController } from "./tickets.controller";
+import { TicketsController } from "./tickets.controller";
 import { TicketsService } from "./tickets.service";
+import { PrismaModule } from "../prisma/prisma.module";
+import { AuthModule } from "../auth/auth.module";
 
 @Module({
-  imports: [
-    PrismaModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || "dev-secret",
-    }),
-  ],
-  controllers: [TicketsController, TicketsPublicController],
+  imports: [PrismaModule, AuthModule],
+  controllers: [TicketsController],
   providers: [TicketsService],
 })
 export class TicketsModule {}
