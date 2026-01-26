@@ -11,6 +11,7 @@ import { Role } from "@prisma/client";
 export class TicketsController {
   constructor(private svc: TicketsService) {}
 
+  // ✅ MESAS + ESTADO
   @Get("tables")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
   tables() {
@@ -46,8 +47,13 @@ export class TicketsController {
   getOne(@Param("id") id: string) {
     return this.svc.getTicketWithTotals(id);
   }
+}
 
-  // ✅ público pero validado por token en query
+// ✅ Controller público SOLO para voucher (sin guards)
+@Controller()
+export class TicketsPublicController {
+  constructor(private svc: TicketsService) {}
+
   @Get("tickets/:id/receipt")
   async receipt(@Param("id") id: string, @Query("token") token: string, @Res() res: Response) {
     const html = await this.svc.receiptHtmlWithToken(id, token);

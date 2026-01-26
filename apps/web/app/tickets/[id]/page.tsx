@@ -110,7 +110,12 @@ export default function TicketPage() {
         body: JSON.stringify({ method }),
       });
       await load();
-      window.open(`${API_URL}/tickets/${ticket.id}/receipt`, "_blank");
+      // abrir voucher (con token en query)
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+      if (!token) throw new Error("No hay accessToken. Revisa login.");
+
+      window.open(`${API_URL}/tickets/${ticket.id}/receipt?token=${encodeURIComponent(token)}`, "_blank");
+
     } catch (e: any) {
       console.error(e);
       setErr(e?.message || "No pude cobrar.");

@@ -1,12 +1,15 @@
 import { Module } from "@nestjs/common";
-import { TicketsController } from "./tickets.controller";
 import { TicketsService } from "./tickets.service";
+import { TicketsController, TicketsPublicController } from "./tickets.controller";
 import { PrismaModule } from "../prisma/prisma.module";
-import { AuthModule } from "../auth/auth.module";
+import { JwtModule } from "@nestjs/jwt";
 
 @Module({
-  imports: [PrismaModule, AuthModule],
-  controllers: [TicketsController],
+  imports: [
+    PrismaModule,
+    JwtModule.register({}), // usa JWT_SECRET desde env en JwtService.verifyAsync()
+  ],
+  controllers: [TicketsController, TicketsPublicController],
   providers: [TicketsService],
 })
 export class TicketsModule {}
