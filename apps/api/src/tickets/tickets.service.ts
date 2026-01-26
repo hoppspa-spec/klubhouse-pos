@@ -1,12 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service";
 import { TicketKind, TicketStatus } from "@prisma/client";
 import { calcMinutes, calcRental, roundUp100 } from "./pricing";
 import { renderReceipt } from "./receipt";
-import { BadRequestException, Injectable, NotFoundException, UnauthorizedException, } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
-import { PrismaService } from "../prisma/prisma.service";
-import { renderReceipt } from "./receipt";
+
 
   @Injectable()
   export class TicketsService {

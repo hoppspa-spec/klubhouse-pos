@@ -5,16 +5,21 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
 type Role = "MASTER" | "SLAVE" | "SELLER";
-type CurrentUser = { id: string; username: string; name: string; role: Role } | null;
 
-type TableState = { id: number; name: string; type: "POOL" | "BAR"; ticket: any | null };
+type TableState = {
+  id: number;
+  name: string;
+  type: "POOL" | "BAR";
+  ticket: any | null;
+};
 
 export default function TablesPage() {
   const r = useRouter();
   const [tables, setTables] = useState<TableState[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
-  const currentUser: CurrentUser = useMemo(() => {
+  // ✅ leer user/role sin romper SSR
+  const user = useMemo(() => {
     if (typeof window === "undefined") return null;
     try {
       return JSON.parse(localStorage.getItem("user") || "null");
@@ -23,7 +28,9 @@ export default function TablesPage() {
     }
   }, []);
 
-  const role = currentUser?.role;
+  const role: Role | undefined = user?.role;
+
+  // ✅ permisos por rol (tu lógica PRO)
   const canUsers = role === "MASTER" || role === "SLAVE";
   const canProducts = role === "MASTER" || role === "SLAVE";
 
@@ -48,16 +55,19 @@ export default function TablesPage() {
     try {
       setErr(null);
 
+      // si ya hay ticket, ir directo
       if (t.ticket?.id) {
         r.push(`/tickets/${t.ticket.id}`);
         return;
       }
 
+      // abrir ticket
       await api("/tickets/open", {
         method: "POST",
         body: JSON.stringify({ tableId: t.id }),
       });
 
+      // recargar mesas y obtener ticket recién creado
       const data = await api<TableState[]>("/tables");
       setTables(data);
 
@@ -82,9 +92,7 @@ export default function TablesPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <h1 style={{ margin: 0 }}>Mesas & Barra</h1>
-          <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>
-            Producción · anti-magia {role ? `· ${role}` : ""}
-          </div>
+          <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>Producción · anti-magia</div>
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
