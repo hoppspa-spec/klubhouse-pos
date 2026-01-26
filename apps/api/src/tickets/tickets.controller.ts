@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Post, Req, Res, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 import { Response } from "express";
 import { TicketsService } from "./tickets.service";
 import { AuthGuard } from "../auth/auth.guard";
@@ -6,12 +16,14 @@ import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../auth/roles.decorator";
 import { Role } from "@prisma/client";
 
+/**
+ * ✅ Controller PROTEGIDO (requiere Bearer token normal)
+ */
 @Controller()
 @UseGuards(AuthGuard, RolesGuard)
 export class TicketsController {
   constructor(private svc: TicketsService) {}
 
-  // ✅ ESTE ES EL ENDPOINT QUE EL POS USA PARA “MESAS + TICKET”
   @Get("tables")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
   tables() {
@@ -26,7 +38,10 @@ export class TicketsController {
 
   @Post("tickets/:id/items")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
-  addItem(@Param("id") id: string, @Body() body: { productId: string; qtyDelta: number }) {
+  addItem(
+    @Param("id") id: string,
+    @Body() body: { productId: string; qtyDelta: number }
+  ) {
     return this.svc.addItem(id, body.productId, body.qtyDelta);
   }
 
@@ -35,16 +50,6 @@ export class TicketsController {
   close(@Param("id") id: string) {
     return this.svc.closeRental(id);
   }
-  
-  @Post("tickets/:id/checkout")
-  @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
-  checkout(
-  @Req() req: any,
-  @Param("id") id: string,
-  @Body() body: { method: "CASH" | "DEBIT" }) {
-    return this.svc.checkout(id, req.user.sub, body.method);
-  }
-
 
   @Get("tickets/:id")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
@@ -52,13 +57,34 @@ export class TicketsController {
     return this.svc.getTicketWithTotals(id);
   }
 
-  @Get("tickets/:id/receipt")
+  @Post("tickets/:id/checkout")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
-  async receipt(@Param("id") id: string, @Res() res: Response) {
-    const html = await this.svc.receiptHtml(id);
+  checkout(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: { method: "CASH" | "DEBIT" }
+  ) {
+    return this.svc.checkout(id, req.user.sub, body.method);
+  }
+}
+
+/**
+ * ✅ Controller PÚBLICO SOLO PARA RECEIPT
+ * OJO: NO TIENE @UseGuards, por eso funciona sin Bearer.
+ * Valida con token por query (?token=...).
+ */
+@Controller()
+export class TicketsPublicController {
+  constructor(private svc: TicketsService) {}
+
+  @Get("tickets/:id/receipt")
+  async receipt(
+    @Param("id") id: string,
+    @Query("token") token: string,
+    @Res() res: Response
+  ) {
+    const html = await this.svc.receiptHtmlWithToken(id, token);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.send(html);
   }
-  
 }
-

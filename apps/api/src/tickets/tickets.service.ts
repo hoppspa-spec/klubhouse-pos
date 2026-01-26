@@ -3,26 +3,61 @@ import { PrismaService } from "../prisma/prisma.service";
 import { TicketKind, TicketStatus } from "@prisma/client";
 import { calcMinutes, calcRental, roundUp100 } from "./pricing";
 import { renderReceipt } from "./receipt";
+import { BadRequestException, Injectable, NotFoundException, UnauthorizedException, } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { PrismaService } from "../prisma/prisma.service";
+import { renderReceipt } from "./receipt";
 
-@Injectable()
-export class TicketsService {
-  constructor(private prisma: PrismaService) {}
+  @Injectable()
+  export class TicketsService {
+   constructor(
+    private prisma: PrismaService,
+    private jwt: JwtService
+   ) {}
 
-  async getTablesState() {
-    const tables = await this.prisma.table.findMany({ orderBy: { id: "asc" } });
-    const open = await this.prisma.ticket.findMany({
-      where: { status: { in: [TicketStatus.OPEN, TicketStatus.CHECKOUT] } },
-      include: { items: { include: { product: true } } }
+  async receiptHtmlWithToken(ticketId: string, token: string) {
+    if (!token) throw new UnauthorizedException("Missing token");
+
+    try {
+      await this.jwt.verifyAsync(token);
+    } catch {
+      throw new UnauthorizedException("Invalid token");
+    }
+
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        table: true,
+        items: { include: { product: true } },
+        payment: true,
+        openedBy: true,
+      },
     });
 
-    const map = new Map(open.map(t => [t.tableId, t]));
-    return tables.map(t => ({
-      id: t.id,
-      name: t.name,
-      type: t.type,
-      ticket: map.get(t.id) || null
-    }));
-  }
+    if (!ticket?.payment) {
+      throw new NotFoundException("No hay pago / voucher");
+    }
+
+    return renderReceipt({
+      receiptNumber: ticket.payment.receiptNumber,
+      title: "KLUB HOUSE",
+      when: ticket.payment.paidAt,
+      seller: ticket.openedBy.name,
+      tableName: ticket.table.name,
+      startedAt: ticket.startedAt,
+      endedAt: ticket.endedAt,
+      minutes: ticket.minutesPlayed,
+      rentalAmount: ticket.rentalAmount,
+      items: ticket.items.map((i) => ({
+        name: i.product.name,
+        qty: i.qty,
+        unitPrice: i.unitPrice,
+        lineTotal: i.lineTotal,
+      })),
+      total: ticket.payment.totalAmount,
+      method: ticket.payment.method,
+   });
+ }
 
   async openTicket(tableId: number, userId: string) {
     const table = await this.prisma.table.findUnique({ where: { id: tableId } });
