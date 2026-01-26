@@ -1,7 +1,59 @@
 const { PrismaClient } = require("@prisma/client");
+const bcrypt = require("bcryptjs");
+
 const prisma = new PrismaClient();
 
+async function upsertUser({ username, name, role, password }) {
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  await prisma.user.upsert({
+    where: { username },
+    update: {
+      name,
+      role,
+      isActive: true,
+      passwordHash, // ✅ importante: si alguna vez quedó malo, lo repara
+    },
+    create: {
+      username,
+      name,
+      role,
+      isActive: true,
+      passwordHash,
+    },
+  });
+}
+
 async function main() {
+  // --------------------
+  // USERS (LOGIN OK)
+  // --------------------
+  await upsertUser({
+    username: "admin",
+    name: "Dueño",
+    role: "MASTER",
+    password: "admin1234",
+  });
+
+  await upsertUser({
+    username: "manager",
+    name: "Gerente",
+    role: "SLAVE",
+    password: "manager1234",
+  });
+
+  await upsertUser({
+    username: "seller1",
+    name: "Vendedor 1",
+    role: "SELLER",
+    password: "seller1234",
+  });
+
+  console.log("✅ Seed users OK");
+
+  // --------------------
+  // PRODUCTS
+  // --------------------
   const products = [
     { name: "Bebida", category: "BEBIDAS", price: 1200, stock: 120, stockCritical: 10, isActive: true },
     { name: "Cigarro", category: "CIGARROS", price: 300, stock: 200, stockCritical: 20, isActive: true },
