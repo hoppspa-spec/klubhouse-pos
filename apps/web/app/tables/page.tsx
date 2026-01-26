@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+
+type Role = "MASTER" | "SLAVE" | "SELLER";
+type CurrentUser = { id: string; username: string; name: string; role: Role } | null;
 
 type TableState = { id: number; name: string; type: "POOL" | "BAR"; ticket: any | null };
 
@@ -10,6 +13,19 @@ export default function TablesPage() {
   const r = useRouter();
   const [tables, setTables] = useState<TableState[]>([]);
   const [err, setErr] = useState<string | null>(null);
+
+  const currentUser: CurrentUser = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      return JSON.parse(localStorage.getItem("user") || "null");
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const role = currentUser?.role;
+  const canUsers = role === "MASTER" || role === "SLAVE";
+  const canProducts = role === "MASTER" || role === "SLAVE";
 
   async function refresh() {
     try {
@@ -32,19 +48,16 @@ export default function TablesPage() {
     try {
       setErr(null);
 
-      // si ya hay ticket, ir directo
       if (t.ticket?.id) {
         r.push(`/tickets/${t.ticket.id}`);
         return;
       }
 
-      // abrir ticket
       await api("/tickets/open", {
         method: "POST",
         body: JSON.stringify({ tableId: t.id }),
       });
 
-      // recargar mesas y obtener ticket recién creado
       const data = await api<TableState[]>("/tables");
       setTables(data);
 
@@ -69,37 +82,43 @@ export default function TablesPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <h1 style={{ margin: 0 }}>Mesas & Barra</h1>
-          <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>Producción · anti-magia</div>
+          <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>
+            Producción · anti-magia {role ? `· ${role}` : ""}
+          </div>
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <a
-            href="/users"
-            style={{
-              color: "#f5c400",
-              fontWeight: 900,
-              textDecoration: "none",
-              border: "1px solid #f5c400",
-              padding: "8px 12px",
-              borderRadius: 12,
-            }}
-          >
-            Usuarios
-          </a>
+          {canUsers && (
+            <a
+              href="/users"
+              style={{
+                color: "#f5c400",
+                fontWeight: 900,
+                textDecoration: "none",
+                border: "1px solid #f5c400",
+                padding: "8px 12px",
+                borderRadius: 12,
+              }}
+            >
+              Usuarios
+            </a>
+          )}
 
-          <a
-            href="/products"
-            style={{
-              color: "#f5c400",
-              fontWeight: 900,
-              textDecoration: "none",
-              border: "1px solid #f5c400",
-              padding: "8px 12px",
-              borderRadius: 12,
-            }}
-          >
-            Productos
-          </a>
+          {canProducts && (
+            <a
+              href="/products"
+              style={{
+                color: "#f5c400",
+                fontWeight: 900,
+                textDecoration: "none",
+                border: "1px solid #f5c400",
+                padding: "8px 12px",
+                borderRadius: 12,
+              }}
+            >
+              Productos
+            </a>
+          )}
 
           <button
             onClick={logout}
@@ -127,7 +146,16 @@ export default function TablesPage() {
           const bg = busy ? "#1a1400" : "#0f0f0f";
 
           return (
-            <div key={t.id} style={{ background: bg, border: `2px solid ${border}`, borderRadius: 18, padding: 14, minHeight: 110 }}>
+            <div
+              key={t.id}
+              style={{
+                background: bg,
+                border: `2px solid ${border}`,
+                borderRadius: 18,
+                padding: 14,
+                minHeight: 110,
+              }}
+            >
               <div style={{ fontWeight: 900, fontSize: 16 }}>{t.name}</div>
               <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
                 {busy ? `Activo: ${t.ticket.kind} · ${t.ticket.status}` : "Libre"}

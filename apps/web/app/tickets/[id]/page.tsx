@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { api, API_URL } from "../../../lib/api";
+import { useParams } from "next/navigation";
+import { api, API_URL } from "@/lib/api";
 
-type Product = { id: string; name: string; category: string; price: number; stock: number };
+type Product = { id: string; name: string; category: string; price: number; stock: number; isActive: boolean };
 type TicketItem = { id: string; productId: string; qty: number; unitPrice: number; lineTotal: number; product: Product };
 type Ticket = {
   id: string;
@@ -20,7 +20,7 @@ type Ticket = {
 
 export default function TicketPage() {
   const { id } = useParams<{ id: string }>();
-  const r = useRouter();
+
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [totals, setTotals] = useState<{ consumos: number; rental: number; total: number } | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -31,7 +31,7 @@ export default function TicketPage() {
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return products;
-    return products.filter(p => (p.name + " " + p.category).toLowerCase().includes(s));
+    return products.filter((p) => (p.name + " " + p.category).toLowerCase().includes(s));
   }, [products, q]);
 
   async function load() {
@@ -39,11 +39,21 @@ export default function TicketPage() {
     try {
       const [t, ps] = await Promise.all([
         api<{ ticket: Ticket; totals: { consumos: number; rental: number; total: number } }>(`/tickets/${id}`),
-        api<Product[]>(`/products`)
+        api<Product[]>(`/products`),
       ]);
+
       setTicket(t.ticket);
       setTotals(t.totals);
-      setProducts(ps);
+
+      const cleaned = (ps || [])
+        .filter((p) => p.isActive)
+        .sort((a, b) => {
+          const c = a.category.localeCompare(b.category);
+          if (c !== 0) return c;
+          return a.name.localeCompare(b.name);
+        });
+
+      setProducts(cleaned);
     } catch (e) {
       console.error(e);
       setErr("No pude cargar ticket / productos.");
@@ -64,7 +74,7 @@ export default function TicketPage() {
     try {
       await api(`/tickets/${ticket.id}/items`, {
         method: "POST",
-        body: JSON.stringify({ productId, qtyDelta })
+        body: JSON.stringify({ productId, qtyDelta }),
       });
       await load();
     } catch (e: any) {
@@ -95,12 +105,11 @@ export default function TicketPage() {
     setLoading(true);
     setErr(null);
     try {
-      const out = await api<{ ok: boolean; receiptNumber: number; total: number }>(`/tickets/${ticket.id}/checkout`, {
+      await api<{ ok: boolean; receiptNumber: number; total: number }>(`/tickets/${ticket.id}/checkout`, {
         method: "POST",
-        body: JSON.stringify({ method })
+        body: JSON.stringify({ method }),
       });
       await load();
-      // abrir voucher
       window.open(`${API_URL}/tickets/${ticket.id}/receipt`, "_blank");
     } catch (e: any) {
       console.error(e);
@@ -131,9 +140,7 @@ export default function TicketPage() {
           <div style={{ fontWeight: 900, fontSize: 20 }}>
             {ticket.table.name} · {ticket.kind} · {ticket.status}
           </div>
-          <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>
-            Ticket: {ticket.id}
-          </div>
+          <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>Ticket: {ticket.id}</div>
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -148,9 +155,15 @@ export default function TicketPage() {
       {/* Totals */}
       <div style={{ marginTop: 14, background: "#0d0d0d", border: "1px solid #222", borderRadius: 14, padding: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div>Consumos: <b>${totals?.consumos ?? 0}</b></div>
-          <div>Arriendo: <b>${totals?.rental ?? 0}</b></div>
-          <div style={{ fontSize: 16 }}>TOTAL: <b>${totals?.total ?? 0}</b></div>
+          <div>
+            Consumos: <b>${totals?.consumos ?? 0}</b>
+          </div>
+          <div>
+            Arriendo: <b>${totals?.rental ?? 0}</b>
+          </div>
+          <div style={{ fontSize: 16 }}>
+            TOTAL: <b>${totals?.total ?? 0}</b>
+          </div>
         </div>
 
         <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -182,8 +195,19 @@ export default function TicketPage() {
           <div style={{ color: "#bdbdbd" }}>Sin consumos aún.</div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
-            {ticket.items.map(it => (
-              <div key={it.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", border: "1px solid #222", borderRadius: 12, padding: 10 }}>
+            {ticket.items.map((it) => (
+              <div
+                key={it.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  alignItems: "center",
+                  border: "1px solid #222",
+                  borderRadius: 12,
+                  padding: 10,
+                }}
+              >
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 900 }}>{it.product.name}</div>
                   <div style={{ color: "#bdbdbd", fontSize: 12 }}>
@@ -191,8 +215,12 @@ export default function TicketPage() {
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => add(it.productId, -1)} disabled={loading} style={btnSecondary()}>-1</button>
-                  <button onClick={() => add(it.productId, +1)} disabled={loading} style={btn()}>+1</button>
+                  <button onClick={() => add(it.productId, -1)} disabled={loading} style={btnSecondary()}>
+                    -1
+                  </button>
+                  <button onClick={() => add(it.productId, +1)} disabled={loading} style={btn()}>
+                    +1
+                  </button>
                 </div>
               </div>
             ))}
@@ -208,7 +236,7 @@ export default function TicketPage() {
         </div>
 
         <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-          {filtered.map(p => (
+          {filtered.map((p) => (
             <button
               key={p.id}
               onClick={() => add(p.id, +1)}
@@ -220,7 +248,7 @@ export default function TicketPage() {
                 color: "#fff",
                 borderRadius: 12,
                 padding: 12,
-                cursor: "pointer"
+                cursor: "pointer",
               }}
             >
               <div style={{ fontWeight: 900 }}>{p.name}</div>
