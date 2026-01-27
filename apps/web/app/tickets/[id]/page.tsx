@@ -101,28 +101,32 @@ export default function TicketPage() {
   }
 
   async function checkout(method: "CASH" | "DEBIT") {
-    if (!ticket) return;
-    setLoading(true);
-    setErr(null);
-    try {
-      await api<{ ok: boolean; receiptNumber: number; total: number }>(`/tickets/${ticket.id}/checkout`, {
-        method: "POST",
-        body: JSON.stringify({ method }),
-      });
-      await load();
-      // abrir voucher (con token en query)
-      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
-      if (!token) throw new Error("No hay accessToken. Revisa login.");
+  if (!ticket) return;
+  setLoading(true);
+  setErr(null);
 
-      window.open(`${API_URL}/tickets/${ticket.id}/receipt?token=${encodeURIComponent(token)}`, "_blank");
+  try {
+    await api<{ ok: boolean; receiptNumber: number; total: number }>(`/tickets/${ticket.id}/checkout`, {
+      method: "POST",
+      body: JSON.stringify({ method }),
+    });
 
-    } catch (e: any) {
-      console.error(e);
-      setErr(e?.message || "No pude cobrar.");
-    } finally {
-      setLoading(false);
-    }
+    await load();
+
+    // abrir voucher (con token en query)
+    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+    if (!token) throw new Error("No hay accessToken (sesión). Re-loguea.");
+
+    const url = `${API_URL}/tickets/${ticket.id}/receipt?token=${encodeURIComponent(token)}`;
+    window.open(url, "_blank");
+  } catch (e: any) {
+    console.error(e);
+    setErr(e?.message || "No pude cobrar.");
+  } finally {
+    setLoading(false);
   }
+}
+
 
   if (!ticket) {
     return (
