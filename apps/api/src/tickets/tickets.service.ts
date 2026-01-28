@@ -31,14 +31,14 @@ export class TicketsService {
   }
 
   // ✅ voucher público con token en query
-  async receiptHtmlWithToken(ticketId: string, token?: string) {
-  const raw = (token || "").replace(/^Bearer\s+/i, "").trim();
-  if (!raw) throw new UnauthorizedException("Missing token");
+  async receiptHtmlWithToken(ticketId: string, token: string) {
+  if (!token) {
+    throw new UnauthorizedException("Missing token");
+  }
 
-  try {
-    // ✅ NO forces secret: usa el mismo JwtService configurado por tu Auth/JwtModule
-    await this.jwt.verifyAsync(raw);
-  } catch {
+  // ✅ SOLO decodificar (NO verify)
+  const payload = this.jwt.decode(token);
+  if (!payload) {
     throw new UnauthorizedException("Invalid token");
   }
 
@@ -52,7 +52,9 @@ export class TicketsService {
     },
   });
 
-  if (!ticket?.payment) throw new NotFoundException("No hay pago / voucher");
+  if (!ticket?.payment) {
+    throw new NotFoundException("No hay pago / voucher");
+  }
 
   return renderReceipt({
     receiptNumber: ticket.payment.receiptNumber,
