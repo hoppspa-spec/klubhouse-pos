@@ -31,11 +31,13 @@ export class TicketsService {
   }
 
   // ✅ voucher público con token en query
-  async receiptHtmlWithToken(ticketId: string, token: string) {
-    if (!token) throw new UnauthorizedException("Missing token");
+  async receiptHtmlWithToken(ticketId: string, token?: string) {
+    const raw = (token || "").replace(/^Bearer\s+/i, "").trim();
+    if (!raw) throw new UnauthorizedException("Missing token");
 
     try {
-      await this.jwt.verifyAsync(token);
+      // ✅ usa el mismo secret de tu auth (Render env: JWT_SECRET)
+      await this.jwt.verifyAsync(raw, { secret: process.env.JWT_SECRET });
     } catch {
       throw new UnauthorizedException("Invalid token");
     }
