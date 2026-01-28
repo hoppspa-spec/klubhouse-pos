@@ -114,11 +114,14 @@ export default function TicketPage() {
     await load();
 
     // abrir voucher (con token en query)
-    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+    const token = localStorage.getItem("accessToken");
     if (!token) throw new Error("No hay accessToken (sesión). Re-loguea.");
 
     const url = `${API_URL}/tickets/${ticket.id}/receipt?token=${encodeURIComponent(token)}`;
-    window.open(url, "_blank");
+
+    // ✅ misma ventana (más POS real)
+    window.location.href = url;
+
   } catch (e: any) {
     console.error(e);
     setErr(e?.message || "No pude cobrar.");

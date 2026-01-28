@@ -32,48 +32,48 @@ export class TicketsService {
 
   // ✅ voucher público con token en query
   async receiptHtmlWithToken(ticketId: string, token?: string) {
-    const raw = (token || "").replace(/^Bearer\s+/i, "").trim();
-    if (!raw) throw new UnauthorizedException("Missing token");
+  const raw = (token || "").replace(/^Bearer\s+/i, "").trim();
+  if (!raw) throw new UnauthorizedException("Missing token");
 
-    try {
-      // ✅ usa el mismo secret de tu auth (Render env: JWT_SECRET)
-      await this.jwt.verifyAsync(raw, { secret: process.env.JWT_SECRET });
-    } catch {
-      throw new UnauthorizedException("Invalid token");
-    }
-
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
-      include: {
-        table: true,
-        items: { include: { product: true } },
-        payment: true,
-        openedBy: true,
-      },
-    });
-
-    if (!ticket?.payment) throw new NotFoundException("No hay pago / voucher");
-
-    return renderReceipt({
-      receiptNumber: ticket.payment.receiptNumber,
-      title: "KLUB HOUSE",
-      when: ticket.payment.paidAt,
-      seller: ticket.openedBy.name,
-      tableName: ticket.table.name,
-      startedAt: ticket.startedAt,
-      endedAt: ticket.endedAt,
-      minutes: ticket.minutesPlayed,
-      rentalAmount: ticket.rentalAmount,
-      items: ticket.items.map((i) => ({
-        name: i.product.name,
-        qty: i.qty,
-        unitPrice: i.unitPrice,
-        lineTotal: i.lineTotal,
-      })),
-      total: ticket.payment.totalAmount,
-      method: ticket.payment.method,
-    });
+  try {
+    // ✅ NO forces secret: usa el mismo JwtService configurado por tu Auth/JwtModule
+    await this.jwt.verifyAsync(raw);
+  } catch {
+    throw new UnauthorizedException("Invalid token");
   }
+
+  const ticket = await this.prisma.ticket.findUnique({
+    where: { id: ticketId },
+    include: {
+      table: true,
+      items: { include: { product: true } },
+      payment: true,
+      openedBy: true,
+    },
+  });
+
+  if (!ticket?.payment) throw new NotFoundException("No hay pago / voucher");
+
+  return renderReceipt({
+    receiptNumber: ticket.payment.receiptNumber,
+    title: "KLUB HOUSE",
+    when: ticket.payment.paidAt,
+    seller: ticket.openedBy.name,
+    tableName: ticket.table.name,
+    startedAt: ticket.startedAt,
+    endedAt: ticket.endedAt,
+    minutes: ticket.minutesPlayed,
+    rentalAmount: ticket.rentalAmount,
+    items: ticket.items.map((i) => ({
+      name: i.product.name,
+      qty: i.qty,
+      unitPrice: i.unitPrice,
+      lineTotal: i.lineTotal,
+    })),
+    total: ticket.payment.totalAmount,
+    method: ticket.payment.method,
+  });
+}
 
   async openTicket(tableId: number, userId: string) {
     const table = await this.prisma.table.findUnique({ where: { id: tableId } });
