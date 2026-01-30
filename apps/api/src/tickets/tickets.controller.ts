@@ -11,7 +11,6 @@ import { Role } from "@prisma/client";
 export class TicketsController {
   constructor(private svc: TicketsService) {}
 
-  // ✅ MESAS + ESTADO
   @Get("tables")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
   tables() {
@@ -42,6 +41,13 @@ export class TicketsController {
     return this.svc.checkout(id, req.user.sub, body.method);
   }
 
+  // ✅ mover mesa
+  @Post("tickets/:id/move")
+  @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
+  move(@Param("id") id: string, @Body() body: { toTableId: number }) {
+    return this.svc.moveTicket(id, body.toTableId);
+  }
+
   @Get("tickets/:id")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
   getOne(@Param("id") id: string) {
@@ -61,3 +67,4 @@ export class TicketsPublicController {
     return res.send(html);
   }
 }
+

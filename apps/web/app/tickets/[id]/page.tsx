@@ -18,6 +18,8 @@ type Ticket = {
   rentalAmount?: number | null;
 };
 
+type TableState = { id: number; name: string; type: "POOL" | "BAR"; ticket: any | null };
+
 export default function TicketPage() {
   const { id } = useParams<{ id: string }>();
 
@@ -28,11 +30,23 @@ export default function TicketPage() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // mover mesa UI
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [tables, setTables] = useState<TableState[]>([]);
+
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return products;
     return products.filter((p) => (p.name + " " + p.category).toLowerCase().includes(s));
   }, [products, q]);
+
+  const freeTablesSameType = useMemo(() => {
+    if (!ticket) return [];
+    return (tables || [])
+      .filter((t) => t.type === ticket.table.type)
+      .filter((t) => !t.ticket)
+      .filter((t) => t.id !== ticket.table.id);
+  }, [tables, ticket]);
 
   async function load() {
     setErr(null);
@@ -57,6 +71,15 @@ export default function TicketPage() {
     } catch (e) {
       console.error(e);
       setErr("No pude cargar ticket / productos.");
+    }
+  }
+
+  async function loadTables() {
+    try {
+      const data = await api<TableState[]>("/tables");
+      setTables(data);
+    } catch (e) {
+      console.error(e);
     }
   }
 
@@ -101,35 +124,57 @@ export default function TicketPage() {
   }
 
   async function checkout(method: "CASH" | "DEBIT") {
-  if (!ticket) return;
-  setLoading(true);
-  setErr(null);
+    if (!ticket) return;
+    setLoading(true);
+    setErr(null);
 
-  try {
-    await api<{ ok: boolean; receiptNumber: number; total: number }>(`/tickets/${ticket.id}/checkout`, {
-      method: "POST",
-      body: JSON.stringify({ method }),
-    });
+    try {
+      // ✅ SOLO UNA LLAMADA
+      const res = await api<{
+        ok: boolean;
+        receiptNumber: number;
+        total: number;
+        receiptToken: string;
+      }>(`/tickets/${ticket.id}/checkout`, {
+        method: "POST",
+        body: JSON.stringify({ method }),
+      });
 
-    await load();
-
-    // abrir voucher (con token en query)
-    const token = localStorage.getItem("accessToken");
-    if (!token) throw new Error("No hay accessToken (sesión). Re-loguea.");
-
-    const url = `${API_URL}/tickets/${ticket.id}/receipt?token=${encodeURIComponent(token)}`;
-
-    // ✅ misma ventana (más POS real)
-    window.location.href = url;
-
-  } catch (e: any) {
-    console.error(e);
-    setErr(e?.message || "No pude cobrar.");
-  } finally {
-    setLoading(false);
+      // ✅ voucher misma ventana
+      const url = `${API_URL}/tickets/${ticket.id}/receipt?token=${encodeURIComponent(res.receiptToken)}`;
+      window.location.assign(url);
+    } catch (e: any) {
+      console.error(e);
+      setErr(e?.message || "No pude cobrar.");
+    } finally {
+      setLoading(false);
+    }
   }
-}
 
+  async function openMove() {
+    setErr(null);
+    await loadTables();
+    setMoveOpen(true);
+  }
+
+  async function doMove(toTableId: number) {
+    if (!ticket) return;
+    setLoading(true);
+    setErr(null);
+    try {
+      await api(`/tickets/${ticket.id}/move`, {
+        method: "POST",
+        body: JSON.stringify({ toTableId }),
+      });
+      setMoveOpen(false);
+      await load();
+    } catch (e: any) {
+      console.error(e);
+      setErr(e?.message || "No pude mover la mesa.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   if (!ticket) {
     return (
@@ -145,6 +190,8 @@ export default function TicketPage() {
     (ticket.kind === "BAR" && (ticket.status === "OPEN" || ticket.status === "CHECKOUT")) ||
     (ticket.kind === "RENTAL" && ticket.status === "CHECKOUT");
 
+  const canMove = ticket.status === "OPEN" || ticket.status === "CHECKOUT";
+
   return (
     <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
@@ -155,7 +202,7 @@ export default function TicketPage() {
           <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>Ticket: {ticket.id}</div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <a href="/tables" style={{ color: "#f5c400", fontWeight: 900, textDecoration: "none" }}>
             ← Mesas
           </a>
@@ -167,18 +214,18 @@ export default function TicketPage() {
       {/* Totals */}
       <div style={{ marginTop: 14, background: "#0d0d0d", border: "1px solid #222", borderRadius: 14, padding: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div>
-            Consumos: <b>${totals?.consumos ?? 0}</b>
-          </div>
-          <div>
-            Arriendo: <b>${totals?.rental ?? 0}</b>
-          </div>
-          <div style={{ fontSize: 16 }}>
-            TOTAL: <b>${totals?.total ?? 0}</b>
-          </div>
+          <div>Consumos: <b>${totals?.consumos ?? 0}</b></div>
+          <div>Arriendo: <b>${totals?.rental ?? 0}</b></div>
+          <div style={{ fontSize: 16 }}>TOTAL: <b>${totals?.total ?? 0}</b></div>
         </div>
 
         <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {canMove && (
+            <button onClick={openMove} disabled={loading} style={btnSecondary()}>
+              Cambiar mesa
+            </button>
+          )}
+
           {canCloseRental && (
             <button onClick={closeRental} disabled={loading} style={btnSecondary()}>
               Cerrar arriendo (calcular tiempo)
@@ -208,18 +255,7 @@ export default function TicketPage() {
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
             {ticket.items.map((it) => (
-              <div
-                key={it.id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  alignItems: "center",
-                  border: "1px solid #222",
-                  borderRadius: 12,
-                  padding: 10,
-                }}
-              >
+              <div key={it.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", border: "1px solid #222", borderRadius: 12, padding: 10 }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 900 }}>{it.product.name}</div>
                   <div style={{ color: "#bdbdbd", fontSize: 12 }}>
@@ -227,12 +263,8 @@ export default function TicketPage() {
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => add(it.productId, -1)} disabled={loading} style={btnSecondary()}>
-                    -1
-                  </button>
-                  <button onClick={() => add(it.productId, +1)} disabled={loading} style={btn()}>
-                    +1
-                  </button>
+                  <button onClick={() => add(it.productId, -1)} disabled={loading} style={btnSecondary()}>-1</button>
+                  <button onClick={() => add(it.productId, +1)} disabled={loading} style={btn()}>+1</button>
                 </div>
               </div>
             ))}
@@ -273,6 +305,56 @@ export default function TicketPage() {
 
         {filtered.length === 0 && <div style={{ marginTop: 10, color: "#bdbdbd" }}>No hay productos que coincidan.</div>}
       </div>
+
+      {/* Modal mover mesa */}
+      {moveOpen && (
+        <div
+          onClick={() => setMoveOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.65)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(520px, 100%)",
+              background: "#0d0d0d",
+              border: "1px solid #222",
+              borderRadius: 14,
+              padding: 14,
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 16 }}>Cambiar mesa</div>
+            <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
+              Moverá consumos y tiempo tal cual. Solo muestra mesas libres del mismo tipo.
+            </div>
+
+            <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+              {freeTablesSameType.map((t) => (
+                <button key={t.id} disabled={loading} onClick={() => doMove(t.id)} style={btn()}>
+                  {t.name}
+                </button>
+              ))}
+            </div>
+
+            {freeTablesSameType.length === 0 && (
+              <div style={{ marginTop: 12, color: "#bdbdbd" }}>No hay mesas libres para mover.</div>
+            )}
+
+            <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button onClick={() => setMoveOpen(false)} disabled={loading} style={btnSecondary()}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -314,3 +396,4 @@ function btnSecondary(): React.CSSProperties {
     whiteSpace: "nowrap",
   };
 }
+

@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service";
 import { TicketKind, TicketStatus } from "@prisma/client";
@@ -7,10 +12,7 @@ import { renderReceipt } from "./receipt";
 
 @Injectable()
 export class TicketsService {
-  constructor(
-    private prisma: PrismaService,
-    private jwt: JwtService
-  ) {}
+  constructor(private prisma: PrismaService, private jwt: JwtService) {}
 
   // ✅ usado por /tables
   async getTablesState() {
@@ -18,7 +20,7 @@ export class TicketsService {
 
     const open = await this.prisma.ticket.findMany({
       where: { status: { in: [TicketStatus.OPEN, TicketStatus.CHECKOUT] } },
-      include: { items: { include: { product: true } } },
+      include: { items: { include: { product: true } }, table: true },
     });
 
     const map = new Map(open.map((t) => [t.tableId, t]));
@@ -30,59 +32,67 @@ export class TicketsService {
     }));
   }
 
-  // ✅ voucher público con token en query
+  // ✅ voucher público con token en query (receiptToken)
   async receiptHtmlWithToken(ticketId: string, token: string) {
-  if (!token) {
-    throw new UnauthorizedException("Missing token");
+    if (!token) throw new UnauthorizedException("Missing token");
+
+    let payload: any;
+    try {
+      payload = await this.jwt.verifyAsync(token);
+    } catch {
+      throw new UnauthorizedException("Invalid token");
+    }
+
+    // ✅ este token es SOLO para voucher
+    if (payload?.type !== "receipt") {
+      throw new UnauthorizedException("Invalid token");
+    }
+    if (payload?.ticketId !== ticketId) {
+      throw new UnauthorizedException("Token inválido para este ticket");
+    }
+
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        table: true,
+        items: { include: { product: true } },
+        payment: true,
+        openedBy: true,
+      },
+    });
+
+    if (!ticket?.payment) throw new NotFoundException("No hay pago / voucher");
+
+    return renderReceipt({
+      receiptNumber: ticket.payment.receiptNumber,
+      title: "KLUB HOUSE",
+      when: ticket.payment.paidAt,
+      seller: ticket.openedBy.name,
+      tableName: ticket.table.name,
+      startedAt: ticket.startedAt,
+      endedAt: ticket.endedAt,
+      minutes: ticket.minutesPlayed,
+      rentalAmount: ticket.rentalAmount,
+      items: ticket.items.map((i) => ({
+        name: i.product.name,
+        qty: i.qty,
+        unitPrice: i.unitPrice,
+        lineTotal: i.lineTotal,
+      })),
+      total: ticket.payment.totalAmount,
+      method: ticket.payment.method,
+    });
   }
-
-  // ✅ SOLO decodificar (NO verify)
-  const payload = this.jwt.decode(token);
-  if (!payload) {
-    throw new UnauthorizedException("Invalid token");
-  }
-
-  const ticket = await this.prisma.ticket.findUnique({
-    where: { id: ticketId },
-    include: {
-      table: true,
-      items: { include: { product: true } },
-      payment: true,
-      openedBy: true,
-    },
-  });
-
-  if (!ticket?.payment) {
-    throw new NotFoundException("No hay pago / voucher");
-  }
-
-  return renderReceipt({
-    receiptNumber: ticket.payment.receiptNumber,
-    title: "KLUB HOUSE",
-    when: ticket.payment.paidAt,
-    seller: ticket.openedBy.name,
-    tableName: ticket.table.name,
-    startedAt: ticket.startedAt,
-    endedAt: ticket.endedAt,
-    minutes: ticket.minutesPlayed,
-    rentalAmount: ticket.rentalAmount,
-    items: ticket.items.map((i) => ({
-      name: i.product.name,
-      qty: i.qty,
-      unitPrice: i.unitPrice,
-      lineTotal: i.lineTotal,
-    })),
-    total: ticket.payment.totalAmount,
-    method: ticket.payment.method,
-  });
-}
 
   async openTicket(tableId: number, userId: string) {
     const table = await this.prisma.table.findUnique({ where: { id: tableId } });
     if (!table) throw new NotFoundException("Mesa no existe");
 
     const existing = await this.prisma.ticket.findFirst({
-      where: { tableId, status: { in: [TicketStatus.OPEN, TicketStatus.CHECKOUT] } },
+      where: {
+        tableId,
+        status: { in: [TicketStatus.OPEN, TicketStatus.CHECKOUT] },
+      },
     });
     if (existing) throw new BadRequestException("Ya existe un ticket activo en esta mesa/barra");
 
@@ -101,7 +111,9 @@ export class TicketsService {
   }
 
   async addItem(ticketId: string, productId: string, qtyDelta: number) {
-    if (!Number.isInteger(qtyDelta) || qtyDelta === 0) throw new BadRequestException("qtyDelta inválido");
+    if (!Number.isInteger(qtyDelta) || qtyDelta === 0) {
+      throw new BadRequestException("qtyDelta inválido");
+    }
 
     const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException("Ticket no existe");
@@ -133,7 +145,11 @@ export class TicketsService {
 
     return this.prisma.ticketItem.update({
       where: { id: existing.id },
-      data: { qty: newQty, unitPrice: existing.unitPrice, lineTotal: existing.unitPrice * newQty },
+      data: {
+        qty: newQty,
+        unitPrice: existing.unitPrice,
+        lineTotal: existing.unitPrice * newQty,
+      },
     });
   }
 
@@ -185,13 +201,18 @@ export class TicketsService {
     // reglas de estado
     if (ticket.kind === TicketKind.BAR) {
       if (ticket.status === TicketStatus.OPEN) {
-        await this.prisma.ticket.update({ where: { id: ticketId }, data: { status: TicketStatus.CHECKOUT } });
+        await this.prisma.ticket.update({
+          where: { id: ticketId },
+          data: { status: TicketStatus.CHECKOUT },
+        });
         (ticket as any).status = TicketStatus.CHECKOUT;
       } else if (ticket.status !== TicketStatus.CHECKOUT) {
         throw new BadRequestException("Ticket no listo para cobro");
       }
     } else {
-      if (ticket.status !== TicketStatus.CHECKOUT) throw new BadRequestException("Ticket no listo para cobro");
+      if (ticket.status !== TicketStatus.CHECKOUT) {
+        throw new BadRequestException("Ticket no listo para cobro");
+      }
     }
 
     const consumos = ticket.items.reduce((a, it) => a + it.lineTotal, 0);
@@ -199,7 +220,9 @@ export class TicketsService {
     const total = roundUp100(rental + consumos);
 
     for (const it of ticket.items) {
-      if (it.product.stock < it.qty) throw new BadRequestException(`Stock insuficiente: ${it.product.name}`);
+      if (it.product.stock < it.qty) {
+        throw new BadRequestException(`Stock insuficiente: ${it.product.name}`);
+      }
     }
 
     const paid = await this.prisma.$transaction(async (tx) => {
@@ -229,10 +252,57 @@ export class TicketsService {
         },
       });
 
-      await tx.ticket.update({ where: { id: ticket.id }, data: { status: TicketStatus.PAID } });
+      await tx.ticket.update({
+        where: { id: ticket.id },
+        data: { status: TicketStatus.PAID },
+      });
+
       return payment;
     });
 
-    return { ok: true, receiptNumber: paid.receiptNumber, total };
+    // ✅ token corto SOLO para voucher
+    const receiptToken = this.jwt.sign(
+      { type: "receipt", ticketId: ticket.id },
+      { expiresIn: "30m" }
+    );
+
+    return { ok: true, receiptNumber: paid.receiptNumber, total, receiptToken };
+  }
+
+  // ✅ mover ticket a otra mesa (mantiene tiempo y consumos)
+  async moveTicket(ticketId: string, toTableId: number) {
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: { table: true },
+    });
+    if (!ticket) throw new NotFoundException("Ticket no existe");
+    if (ticket.status === TicketStatus.PAID || ticket.status === TicketStatus.CANCELED) {
+      throw new BadRequestException("No se puede mover un ticket pagado/anulado");
+    }
+
+    const toTable = await this.prisma.table.findUnique({ where: { id: toTableId } });
+    if (!toTable) throw new NotFoundException("Mesa destino no existe");
+
+    // destino debe estar libre (sin ticket activo)
+    const existing = await this.prisma.ticket.findFirst({
+      where: {
+        tableId: toTableId,
+        status: { in: [TicketStatus.OPEN, TicketStatus.CHECKOUT] },
+      },
+    });
+    if (existing) throw new BadRequestException("Mesa destino ocupada");
+
+    // regla simple: BAR -> BAR, POOL -> POOL (evita mezclas raras)
+    if (ticket.table.type !== toTable.type) {
+      throw new BadRequestException("No puedes mover entre BARRA y MESA");
+    }
+
+    await this.prisma.ticket.update({
+      where: { id: ticketId },
+      data: { tableId: toTableId },
+    });
+
+    return { ok: true };
   }
 }
+

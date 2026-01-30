@@ -5,14 +5,12 @@ import { PrismaService } from "../prisma/prisma.service";
 import { JwtModule } from "@nestjs/jwt";
 
 @Module({
-  imports: [
-    // 👇 importa JwtModule SIN register (usa el global)
-    JwtModule,
-  ],
+  imports: [JwtModule],
   controllers: [TicketsController, TicketsPublicController],
   providers: [TicketsService, PrismaService],
 })
 export class TicketsModule {}
+
 
 
 
