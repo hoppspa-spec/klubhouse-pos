@@ -1,12 +1,7 @@
 async checkout(ticketId: string, userId: string, method: "CASH" | "DEBIT") {
   const ticket = await this.prisma.ticket.findUnique({
     where: { id: ticketId },
-    include: {
-      items: { include: { product: true } },
-      table: true,
-      openedBy: true,
-      payment: true,
-    },
+    include: { items: { include: { product: true } }, table: true, openedBy: true }
   });
 
   if (!ticket) throw new NotFoundException("Ticket no existe");
@@ -74,15 +69,25 @@ async checkout(ticketId: string, userId: string, method: "CASH" | "DEBIT") {
   });
 
   // ✅ token SOLO voucher (aislado del auth)
-  const receiptToken = this.jwt.sign(
+  let receiptToken: string;
+try {
+  receiptToken = this.jwt.sign(
     { type: "receipt", ticketId: ticket.id },
     { expiresIn: "10m" }
-  );
+    if (payload?.type !== "receipt") throw new UnauthorizedException("Invalid token");
+    if (payload?.ticketId !== ticketId) throw new UnauthorizedException("Token inválido para este ticket");
 
-  return {
-    ok: true,
-    receiptNumber: result.receiptNumber,
-    total,
-    receiptToken,
-  };
+  );
+} catch (e) {
+  // ✅ Si esto falla, antes te botaba 500 y perdías el voucher aunque el pago ya estaba hecho
+  console.error("❌ Failed to sign receipt token", e);
+  throw e;
 }
+
+return {
+  ok: true,
+  receiptNumber: payment.receiptNumber,
+  total,
+  receiptToken,
+};
+
