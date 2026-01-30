@@ -192,11 +192,30 @@ export class TicketsService {
   async checkout(ticketId: string, userId: string, method: "CASH" | "DEBIT") {
   const ticket = await this.prisma.ticket.findUnique({
     where: { id: ticketId },
-    include: { items: { include: { product: true } }, table: true, openedBy: true },
+    include: {
+      items: { include: { product: true } },
+      table: true,
+      openedBy: true,
+      payment: true, // 👈 IMPORTANTE
+    },
   });
 
   if (!ticket) throw new NotFoundException("Ticket no existe");
-  if (ticket.status === TicketStatus.PAID) throw new BadRequestException("Ya pagado");
+
+  // ✅ SI YA ESTÁ PAGADO → SOLO DEVOLVER VOUCHER
+  if (ticket.status === TicketStatus.PAID && ticket.payment) {
+    const receiptToken = this.jwt.sign(
+      { ticketId: ticket.id, type: "receipt" },
+      { expiresIn: "10m" }
+    );
+
+    return {
+      ok: true,
+      receiptNumber: ticket.payment.receiptNumber,
+      total: ticket.payment.totalAmount,
+      receiptToken,
+    };
+  }
 
   // reglas de estado
   if (ticket.kind === TicketKind.BAR) {
@@ -259,13 +278,10 @@ export class TicketsService {
     return p;
   });
 
-  // ✅ token corto solo para voucher
+  // ✅ token SOLO para voucher
   const receiptToken = this.jwt.sign(
-  {
-    type: "receipt",     // 👈 CLAVE
-    ticketId: ticket.id,
-  },
-  { expiresIn: "10m" }
+    { ticketId: ticket.id, type: "receipt" },
+    { expiresIn: "10m" }
   );
 
   return {
@@ -275,7 +291,6 @@ export class TicketsService {
     receiptToken,
   };
 }
-
 
   // ✅ mover ticket a otra mesa (mantiene tiempo y consumos)
   async moveTicket(ticketId: string, toTableId: number) {
