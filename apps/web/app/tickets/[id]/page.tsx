@@ -42,6 +42,8 @@ export default function TicketPage() {
   const [q, setQ] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // tiempo en vivo
   const [liveMinutes, setLiveMinutes] = useState<number | null>(null);
 
   // mover mesa UI
@@ -104,6 +106,27 @@ export default function TicketPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // ✅ TIEMPO JUGADO EN VIVO (SIN JSX)
+  useEffect(() => {
+    if (!ticket) return;
+
+    // si está abierto, el tiempo corre en vivo
+    if (ticket.kind === "RENTAL" && ticket.status === "OPEN" && ticket.startedAt) {
+      const tick = () => {
+        setLiveMinutes(diffMinutes(ticket.startedAt!, new Date()));
+      };
+
+      tick(); // inmediato
+      const i = setInterval(tick, 1000);
+      return () => clearInterval(i);
+    }
+
+    // si ya está cerrado, usar tiempo final
+    if (ticket.kind === "RENTAL" && ticket.minutesPlayed != null) {
+      setLiveMinutes(ticket.minutesPlayed);
+    }
+  }, [ticket]);
+
   async function add(productId: string, qtyDelta: number) {
     if (!ticket) return;
     setLoading(true);
@@ -121,26 +144,6 @@ export default function TicketPage() {
       setLoading(false);
     }
   }
-  useEffect(() => {
-  if (!ticket) return;
-
-  // si está abierto, el tiempo corre
-  if (ticket.kind === "RENTAL" && ticket.status === "OPEN" && ticket.startedAt) {
-    const tick = () => {
-      setLiveMinutes(diffMinutes(ticket.startedAt!, new Date()));
-    };
-
-    tick(); // inmediato
-    const i = setInterval(tick, 1000);
-    return () => clearInterval(i);
-  }
-
-  // si ya está cerrado, usar el tiempo final
-  if (ticket.kind === "RENTAL" && ticket.minutesPlayed != null) {
-    setLiveMinutes(ticket.minutesPlayed);
-  }
- }, [ticket]);
-
 
   async function closeRental() {
     if (!ticket) return;
@@ -163,7 +166,6 @@ export default function TicketPage() {
     setErr(null);
 
     try {
-      // ✅ SOLO UNA LLAMADA
       const res = await api<{
         ok: boolean;
         receiptNumber: number;
@@ -174,7 +176,6 @@ export default function TicketPage() {
         body: JSON.stringify({ method }),
       });
 
-      // ✅ voucher misma ventana
       const url = `${API_URL}/tickets/${ticket.id}/receipt?token=${encodeURIComponent(res.receiptToken)}`;
       window.location.assign(url);
     } catch (e: any) {
@@ -247,10 +248,36 @@ export default function TicketPage() {
 
       {/* Totals */}
       <div style={{ marginTop: 14, background: "#0d0d0d", border: "1px solid #222", borderRadius: 14, padding: 14 }}>
+        {/* ✅ Tiempo jugado visible */}
+        {ticket.kind === "RENTAL" && liveMinutes != null && (
+          <div
+            style={{
+              marginBottom: 10,
+              padding: "6px 10px",
+              borderRadius: 10,
+              background: "#1a1400",
+              color: "#f5c400",
+              fontWeight: 900,
+              fontSize: 14,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            ⏱ Tiempo jugado: {formatMinutes(liveMinutes)}
+          </div>
+        )}
+
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div>Consumos: <b>${totals?.consumos ?? 0}</b></div>
-          <div>Arriendo: <b>${totals?.rental ?? 0}</b></div>
-          <div style={{ fontSize: 16 }}>TOTAL: <b>${totals?.total ?? 0}</b></div>
+          <div>
+            Consumos: <b>${totals?.consumos ?? 0}</b>
+          </div>
+          <div>
+            Arriendo: <b>${totals?.rental ?? 0}</b>
+          </div>
+          <div style={{ fontSize: 16 }}>
+            TOTAL: <b>${totals?.total ?? 0}</b>
+          </div>
         </div>
 
         <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -289,7 +316,18 @@ export default function TicketPage() {
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
             {ticket.items.map((it) => (
-              <div key={it.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", border: "1px solid #222", borderRadius: 12, padding: 10 }}>
+              <div
+                key={it.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  alignItems: "center",
+                  border: "1px solid #222",
+                  borderRadius: 12,
+                  padding: 10,
+                }}
+              >
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 900 }}>{it.product.name}</div>
                   <div style={{ color: "#bdbdbd", fontSize: 12 }}>
@@ -297,8 +335,12 @@ export default function TicketPage() {
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => add(it.productId, -1)} disabled={loading} style={btnSecondary()}>-1</button>
-                  <button onClick={() => add(it.productId, +1)} disabled={loading} style={btn()}>+1</button>
+                  <button onClick={() => add(it.productId, -1)} disabled={loading} style={btnSecondary()}>
+                    -1
+                  </button>
+                  <button onClick={() => add(it.productId, +1)} disabled={loading} style={btn()}>
+                    +1
+                  </button>
                 </div>
               </div>
             ))}
@@ -430,4 +472,3 @@ function btnSecondary(): React.CSSProperties {
     whiteSpace: "nowrap",
   };
 }
-
