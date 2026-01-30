@@ -20,6 +20,19 @@ type Ticket = {
 
 type TableState = { id: number; name: string; type: "POOL" | "BAR"; ticket: any | null };
 
+function diffMinutes(from: string, to: Date) {
+  const start = new Date(from).getTime();
+  const end = to.getTime();
+  return Math.max(0, Math.floor((end - start) / 60000));
+}
+
+function formatMinutes(min: number) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m} min`;
+}
+
 export default function TicketPage() {
   const { id } = useParams<{ id: string }>();
 
@@ -29,6 +42,7 @@ export default function TicketPage() {
   const [q, setQ] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [liveMinutes, setLiveMinutes] = useState<number | null>(null);
 
   // mover mesa UI
   const [moveOpen, setMoveOpen] = useState(false);
@@ -107,6 +121,26 @@ export default function TicketPage() {
       setLoading(false);
     }
   }
+  useEffect(() => {
+  if (!ticket) return;
+
+  // si está abierto, el tiempo corre
+  if (ticket.kind === "RENTAL" && ticket.status === "OPEN" && ticket.startedAt) {
+    const tick = () => {
+      setLiveMinutes(diffMinutes(ticket.startedAt!, new Date()));
+    };
+
+    tick(); // inmediato
+    const i = setInterval(tick, 1000);
+    return () => clearInterval(i);
+  }
+
+  // si ya está cerrado, usar el tiempo final
+  if (ticket.kind === "RENTAL" && ticket.minutesPlayed != null) {
+    setLiveMinutes(ticket.minutesPlayed);
+  }
+ }, [ticket]);
+
 
   async function closeRental() {
     if (!ticket) return;
