@@ -149,13 +149,16 @@ export class TicketsService {
     if (!ticket) throw new NotFoundException("Ticket no existe");
     if (ticket.status === TicketStatus.PAID) throw new BadRequestException("Ticket ya pagado");
 
-    // ✅ reglas de estado
-    if (ticket.kind === TicketKind.RENTAL && ticket.status !== TicketStatus.CHECKOUT) {
-      throw new BadRequestException("Debes cerrar arriendo antes de cobrar");
+    // ✅ RENTAL: debe estar en CHECKOUT
+     if (ticket.kind === TicketKind.RENTAL && ticket.status !== TicketStatus.CHECKOUT) {
+       throw new BadRequestException("Debes cerrar arriendo antes de cobrar");
     }
 
-    if (ticket.kind === TicketKind.BAR && ![TicketStatus.OPEN, TicketStatus.CHECKOUT].includes(ticket.status)) {
-      throw new BadRequestException("Ticket no listo para cobro");
+    // ✅ BAR: solo aceptamos OPEN o CHECKOUT
+     if (ticket.kind === TicketKind.BAR) {
+     if (ticket.status !== TicketStatus.OPEN && ticket.status !== TicketStatus.CHECKOUT) {
+       throw new BadRequestException("Ticket no listo para cobro");
+      }
     }
 
     // ✅ totals
