@@ -222,8 +222,11 @@ export default function TicketPage() {
 
   const canCloseRental = ticket.kind === "RENTAL" && ticket.status === "OPEN";
   const canCheckout =
-    (ticket.kind === "BAR" && (ticket.status === "OPEN" || ticket.status === "CHECKOUT")) ||
-    (ticket.kind === "RENTAL" && ticket.status === "CHECKOUT");
+    ticket.status !== "PAID" &&
+    (
+      (ticket.kind === "BAR" && (ticket.status === "OPEN" || ticket.status === "CHECKOUT")) ||
+      (ticket.kind === "RENTAL" && ticket.status === "CHECKOUT")
+    );
 
   const canMove = ticket.status === "OPEN" || ticket.status === "CHECKOUT";
 

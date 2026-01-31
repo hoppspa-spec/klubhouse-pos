@@ -135,46 +135,74 @@ export class TicketsService {
     });
   }
 
-  // ✅ checkout + genera receiptToken (para voucher público)
   async checkout(ticketId: string, userId: string, method: "CASH" | "DEBIT") {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
-      include: {
-        items: { include: { product: true } },
-        table: true,
-        openedBy: true,
-      },
-    });
+  const ticket = await this.prisma.ticket.findUnique({
+    where: { id: ticketId },
+    include: {
+      items: { include: { product: true } },
+      table: true,
+      openedBy: true,
+      payment: true, // ✅ IMPORTANTÍSIMO
+    },
+  });
 
-    if (!ticket) throw new NotFoundException("Ticket no existe");
-    if (ticket.status === TicketStatus.PAID) throw new BadRequestException("Ticket ya pagado");
+  if (!ticket) throw new NotFoundException("Ticket no existe");
 
-    // ✅ RENTAL: debe estar en CHECKOUT
-     if (ticket.kind === TicketKind.RENTAL && ticket.status !== TicketStatus.CHECKOUT) {
-       throw new BadRequestException("Debes cerrar arriendo antes de cobrar");
+  // ✅ Si ya existe pago, NO vuelvas a cobrar → solo entrega voucher (idempotente)
+  if (ticket.payment) {
+    // por si quedó status raro, lo alineamos
+    if (ticket.status !== TicketStatus.PAID) {
+      await this.prisma.ticket.update({
+        where: { id: ticket.id },
+        data: { status: TicketStatus.PAID },
+      });
     }
 
-    // ✅ BAR: solo aceptamos OPEN o CHECKOUT
-     if (ticket.kind === TicketKind.BAR) {
-     if (ticket.status !== TicketStatus.OPEN && ticket.status !== TicketStatus.CHECKOUT) {
-       throw new BadRequestException("Ticket no listo para cobro");
-      }
+    const receiptToken = this.jwt.sign(
+      { type: "receipt", ticketId: ticket.id },
+      { expiresIn: "10m" }
+    );
+
+    return {
+      ok: true,
+      receiptNumber: ticket.payment.receiptNumber,
+      total: ticket.payment.totalAmount,
+      receiptToken,
+      alreadyPaid: true,
+    };
+  }
+
+  // ✅ reglas de estado
+  if (ticket.kind === TicketKind.RENTAL && ticket.status !== TicketStatus.CHECKOUT) {
+    throw new BadRequestException("Debes cerrar arriendo antes de cobrar");
+  }
+
+  if (ticket.kind === TicketKind.BAR && ![TicketStatus.OPEN, TicketStatus.CHECKOUT].includes(ticket.status as any)) {
+    throw new BadRequestException("Ticket no listo para cobro");
+  }
+
+  // ✅ totals
+  const consumos = ticket.items.reduce((a, it) => a + Number(it.lineTotal), 0);
+  const rental = ticket.kind === TicketKind.RENTAL ? Number(ticket.rentalAmount ?? 0) : 0;
+  const total = roundUp100(consumos + rental);
+
+  // ✅ validar stock antes
+  for (const it of ticket.items) {
+    if (it.product.stock < it.qty) {
+      throw new BadRequestException(`Stock insuficiente: ${it.product.name}`);
     }
+  }
 
-    // ✅ totals
-    const consumos = ticket.items.reduce((a, it) => a + it.lineTotal, 0);
-    const rental = ticket.kind === TicketKind.RENTAL ? (ticket.rentalAmount ?? 0) : 0;
-    const total = roundUp100(consumos + rental);
-
-    // ✅ validar stock antes
-    for (const it of ticket.items) {
-      if (it.product.stock < it.qty) {
-        throw new BadRequestException(`Stock insuficiente: ${it.product.name}`);
-      }
-    }
-
-    // ✅ transacción atómica
+  try {
     const payment = await this.prisma.$transaction(async (tx) => {
+      // (opcional) BAR: si está OPEN, pasarlo a CHECKOUT antes de pagar
+      if (ticket.kind === TicketKind.BAR && ticket.status === TicketStatus.OPEN) {
+        await tx.ticket.update({
+          where: { id: ticket.id },
+          data: { status: TicketStatus.CHECKOUT },
+        });
+      }
+
       for (const it of ticket.items) {
         await tx.product.update({
           where: { id: it.productId },
@@ -209,14 +237,10 @@ export class TicketsService {
       return p;
     });
 
-    // ✅ token SOLO para voucher (no auth)
-    let receiptToken: string;
-    try {
-      receiptToken = this.jwt.sign({ type: "receipt", ticketId: ticket.id }, { expiresIn: "10m" });
-    } catch (e) {
-      console.error("❌ Error generando receiptToken", e);
-      throw new InternalServerErrorException("Pago OK pero no se pudo generar voucher");
-    }
+    const receiptToken = this.jwt.sign(
+      { type: "receipt", ticketId: ticket.id },
+      { expiresIn: "10m" }
+    );
 
     return {
       ok: true,
@@ -224,7 +248,32 @@ export class TicketsService {
       total,
       receiptToken,
     };
+  } catch (e: any) {
+    // ✅ Si fue doble-cobro / race condition, devolvemos el pago existente
+    const existing = await this.prisma.payment.findUnique({
+      where: { ticketId: ticket.id },
+    });
+
+    if (existing) {
+      const receiptToken = this.jwt.sign(
+        { type: "receipt", ticketId: ticket.id },
+        { expiresIn: "10m" }
+      );
+
+      return {
+        ok: true,
+        receiptNumber: existing.receiptNumber,
+        total: existing.totalAmount,
+        receiptToken,
+        alreadyPaid: true,
+      };
+    }
+
+    console.error("❌ checkout failed", e);
+    throw new InternalServerErrorException("Error al cobrar (server)");
   }
+}
+
 
   // ✅ voucher público con token en query
   async receiptHtmlWithToken(ticketId: string, token: string) {
