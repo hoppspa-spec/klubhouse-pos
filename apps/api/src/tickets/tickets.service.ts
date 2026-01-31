@@ -137,34 +137,34 @@ export class TicketsService {
 
   async checkout(ticketId: string, userId: string, method: "CASH" | "DEBIT") {
     const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
-      include: {
+    where: { id: ticketId },
+    include: {
       items: { include: { product: true } },
       table: true,
       openedBy: true,
-      payment: true, // 👈 CLAVE
+      payment: true, // 👈 importante para idempotencia
       },
     });
 
-    if (!ticket) throw new NotFoundException("Ticket no existe");
+     if (!ticket) throw new NotFoundException("Ticket no existe");
 
-  // 🟢 SI YA ESTÁ PAGADO → DEVOLVER VOUCHER SIEMPRE
-    if (ticket.payment) {
+  // ✅ IDEMPOTENTE: si ya hay pago, devuelve voucher SIEMPRE (no 500)
+     if (ticket.payment) {
      const receiptToken = this.jwt.sign(
       { type: "receipt", ticketId: ticket.id },
       { expiresIn: "10m" }
     );
 
-    return {
+     return {
       ok: true,
       receiptNumber: ticket.payment.receiptNumber,
       total: ticket.payment.totalAmount,
       receiptToken,
       alreadyPaid: true,
-    };
-  }
+     };
+   }
 
-  // 🔒 reglas de estado
+  // ✅ reglas de estado
   if (ticket.kind === TicketKind.RENTAL && ticket.status !== TicketStatus.CHECKOUT) {
     throw new BadRequestException("Debes cerrar arriendo antes de cobrar");
   }
@@ -177,23 +177,21 @@ export class TicketsService {
     throw new BadRequestException("Ticket no listo para cobro");
   }
 
-  // 💰 totales
+  // ✅ totales
   const consumos = ticket.items.reduce((a, it) => a + Number(it.lineTotal), 0);
   const rental = ticket.kind === TicketKind.RENTAL ? Number(ticket.rentalAmount ?? 0) : 0;
   const total = roundUp100(consumos + rental);
 
-  // 📦 validar stock
+  // ✅ validar stock antes
   for (const it of ticket.items) {
     if (it.product.stock < it.qty) {
       throw new BadRequestException(`Stock insuficiente: ${it.product.name}`);
     }
   }
 
-  let payment;
-
   try {
-    payment = await this.prisma.$transaction(async (tx) => {
-      // BAR: pasar a CHECKOUT si estaba OPEN
+    const payment = await this.prisma.$transaction(async (tx) => {
+      // BAR: pasar a CHECKOUT si estaba OPEN (para dejar rastro)
       if (ticket.kind === TicketKind.BAR && ticket.status === TicketStatus.OPEN) {
         await tx.ticket.update({
           where: { id: ticket.id },
@@ -201,6 +199,7 @@ export class TicketsService {
         });
       }
 
+      // descontar stock + movimiento
       for (const it of ticket.items) {
         await tx.product.update({
           where: { id: it.productId },
@@ -218,6 +217,7 @@ export class TicketsService {
         });
       }
 
+      // crear pago
       const p = await tx.payment.create({
         data: {
           ticketId: ticket.id,
@@ -227,6 +227,7 @@ export class TicketsService {
         },
       });
 
+      // marcar ticket pagado
       await tx.ticket.update({
         where: { id: ticket.id },
         data: { status: TicketStatus.PAID },
@@ -234,10 +235,24 @@ export class TicketsService {
 
       return p;
     });
+
+    // ✅ token voucher (fuera de tx)
+    const receiptToken = this.jwt.sign(
+      { type: "receipt", ticketId: ticket.id },
+      { expiresIn: "10m" }
+    );
+
+    return {
+      ok: true,
+      receiptNumber: payment.receiptNumber,
+      total,
+      receiptToken,
+    };
   } catch (e) {
-    // 🧯 SI FALLÓ PERO EL PAGO EXISTE → RECUPERARLO
-    const existing = await this.prisma.payment.findUnique({
+    // 🧯 Si falló por duplicado / retry, recupera pago y entrega voucher (NO 500)
+    const existing = await this.prisma.payment.findFirst({
       where: { ticketId: ticket.id },
+      orderBy: { paidAt: "desc" },
     });
 
     if (existing) {
@@ -257,6 +272,7 @@ export class TicketsService {
 
     console.error("❌ Checkout failed hard", e);
     throw new InternalServerErrorException("Error al cobrar");
+    }
   }
 
   // 🧾 voucher (fuera de la transacción)
