@@ -177,18 +177,15 @@ export default function TicketPage() {
       });
 
       const url = `${API_URL}/tickets/${ticket.id}/receipt?token=${encodeURIComponent(res.receiptToken)}`;
-
-      // ✅ mismo tab (POS real)
-      window.location.assign(url);
+      window.location.assign(url); // misma ventana ✅
     } catch (e: any) {
       console.error(e);
       setErr(e?.message || "No pude cobrar.");
-      // tip: si quieres, acá puedes hacer load() para refrescar estado
-      // await load();
     } finally {
       setLoading(false);
     }
   }
+
 
   async function openMove() {
     setErr(null);
