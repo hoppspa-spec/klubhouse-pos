@@ -44,6 +44,7 @@ export class TicketsService {
       throw new UnauthorizedException("Invalid token");
     }
 
+    // ✅ este token es SOLO para voucher
     if (payload?.type !== "receipt") throw new UnauthorizedException("Invalid token");
     if (payload?.ticketId !== ticketId) throw new UnauthorizedException("Token inválido para este ticket");
 
@@ -57,13 +58,14 @@ export class TicketsService {
       },
     });
 
-    if (!ticket?.payment) throw new NotFoundException("No hay pago / voucher");
+    if (!ticket) throw new NotFoundException("Ticket no existe");
+    if (!ticket.payment) throw new NotFoundException("No hay pago / voucher");
 
     return renderReceipt({
       receiptNumber: ticket.payment.receiptNumber,
       title: "KLUB HOUSE",
       when: ticket.payment.paidAt,
-      seller: ticket.openedBy.name,
+      seller: ticket.openedBy?.name || "Vendedor",
       tableName: ticket.table.name,
       startedAt: ticket.startedAt,
       endedAt: ticket.endedAt,
@@ -104,7 +106,9 @@ export class TicketsService {
   }
 
   async addItem(ticketId: string, productId: string, qtyDelta: number) {
-    if (!Number.isInteger(qtyDelta) || qtyDelta === 0) throw new BadRequestException("qtyDelta inválido");
+    if (!Number.isInteger(qtyDelta) || qtyDelta === 0) {
+      throw new BadRequestException("qtyDelta inválido");
+    }
 
     const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException("Ticket no existe");
@@ -194,7 +198,7 @@ export class TicketsService {
       throw new BadRequestException("Debes cerrar arriendo antes de cobrar");
     }
 
-    if (ticket.kind === TicketKind.BAR && ticket.status !== TicketStatus.OPEN && ticket.status !== TicketStatus.CHECKOUT) {
+    if (ticket.kind === TicketKind.BAR && !(ticket.status === TicketStatus.OPEN || ticket.status === TicketStatus.CHECKOUT)) {
       throw new BadRequestException("Ticket no listo para cobro");
     }
 
@@ -241,25 +245,23 @@ export class TicketsService {
       return p;
     });
 
+    // ✅ token SOLO para voucher (hard-safe secret)
     let receiptToken: string;
-
     try {
       const secret = process.env.JWT_SECRET;
       if (!secret) {
-      console.error("❌ JWT_SECRET missing at checkout()");
-      throw new Error("JWT_SECRET missing");
+        console.error("❌ JWT_SECRET missing at checkout() runtime");
+        throw new Error("JWT_SECRET missing");
       }
 
-     // ✅ FORZAMOS SECRET AQUÍ (esto evita el bug aunque JwtService venga sin config)
-     receiptToken = this.jwt.sign(
-       { type: "receipt", ticketId: ticket.id },
-       { secret, expiresIn: "10m" }
+      receiptToken = this.jwt.sign(
+        { type: "receipt", ticketId: ticket.id },
+        { secret, expiresIn: "10m" }
       );
     } catch (e) {
       console.error("❌ Error generando receiptToken", e);
       throw new InternalServerErrorException("Pago OK pero no se pudo generar voucher");
     }
-
 
     return { ok: true, receiptNumber: payment.receiptNumber, total, receiptToken };
   }
