@@ -162,6 +162,7 @@ export default function TicketPage() {
 
   async function checkout(method: "CASH" | "DEBIT") {
     if (!ticket) return;
+    if (loading) return; // ✅ anti doble click
     setLoading(true);
     setErr(null);
 
@@ -171,13 +172,16 @@ export default function TicketPage() {
         receiptNumber: number;
         total: number;
         receiptToken: string;
+        alreadyPaid?: boolean;
       }>(`/tickets/${ticket.id}/checkout`, {
         method: "POST",
         body: JSON.stringify({ method }),
       });
 
       const url = `${API_URL}/tickets/${ticket.id}/receipt?token=${encodeURIComponent(res.receiptToken)}`;
-      window.location.assign(url); // misma ventana ✅
+
+      // ✅ misma ventana (modo POS)
+      window.location.assign(url);
     } catch (e: any) {
       console.error(e);
       setErr(e?.message || "No pude cobrar.");
@@ -185,7 +189,6 @@ export default function TicketPage() {
       setLoading(false);
     }
   }
-
 
   async function openMove() {
     setErr(null);
@@ -195,6 +198,7 @@ export default function TicketPage() {
 
   async function doMove(toTableId: number) {
     if (!ticket) return;
+    if (loading) return;
     setLoading(true);
     setErr(null);
     try {
@@ -227,7 +231,6 @@ export default function TicketPage() {
     (ticket.kind === "RENTAL" && ticket.status === "CHECKOUT");
 
   const canMove = ticket.status === "OPEN" || ticket.status === "CHECKOUT";
-
   const showLiveTime = ticket.kind === "RENTAL" && liveMinutes != null;
 
   return (
@@ -251,10 +254,24 @@ export default function TicketPage() {
 
       {/* Totals */}
       <div style={{ marginTop: 14, background: "#0d0d0d", border: "1px solid #222", borderRadius: 14, padding: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <div>Consumos: <b>${totals?.consumos ?? 0}</b></div>
-          <div>Arriendo: <b>${totals?.rental ?? 0}</b></div>
-          <div style={{ fontSize: 16 }}>TOTAL: <b>${totals?.total ?? 0}</b></div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          <div>
+            Consumos: <b>${totals?.consumos ?? 0}</b>
+          </div>
+          <div>
+            Arriendo: <b>${totals?.rental ?? 0}</b>
+          </div>
+          <div style={{ fontSize: 16 }}>
+            TOTAL: <b>${totals?.total ?? 0}</b>
+          </div>
 
           {showLiveTime && (
             <div
@@ -413,9 +430,7 @@ export default function TicketPage() {
               ))}
             </div>
 
-            {freeTablesSameType.length === 0 && (
-              <div style={{ marginTop: 12, color: "#bdbdbd" }}>No hay mesas libres para mover.</div>
-            )}
+            {freeTablesSameType.length === 0 && <div style={{ marginTop: 12, color: "#bdbdbd" }}>No hay mesas libres para mover.</div>}
 
             <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button onClick={() => setMoveOpen(false)} disabled={loading} style={btnSecondary()}>

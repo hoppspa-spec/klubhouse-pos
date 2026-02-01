@@ -185,32 +185,69 @@ export class TicketsService {
   }
 
   async checkout(ticketId: string, userId: string, method: "CASH" | "DEBIT") {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
-      include: { items: { include: { product: true } }, table: true, openedBy: true },
-    });
+  // 👇 incluye payment para hacer el endpoint idempotente
+  const ticket = await this.prisma.ticket.findUnique({
+    where: { id: ticketId },
+    include: {
+      items: { include: { product: true } },
+      table: true,
+      openedBy: true,
+      payment: true,
+    },
+  });
 
-    if (!ticket) throw new NotFoundException("Ticket no existe");
-    if (ticket.status === TicketStatus.PAID) throw new BadRequestException("Ticket ya pagado");
+  if (!ticket) throw new NotFoundException("Ticket no existe");
 
-    // ✅ reglas de estado
-    if (ticket.kind === TicketKind.RENTAL && ticket.status !== TicketStatus.CHECKOUT) {
-      throw new BadRequestException("Debes cerrar arriendo antes de cobrar");
+  // ✅ SI YA ESTÁ PAGADO / YA TIENE PAYMENT:
+  // devolvemos voucher igual (idempotente) y no volvemos a cobrar
+  if (ticket.payment || ticket.status === TicketStatus.PAID) {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      console.error("❌ JWT_SECRET missing at checkout() runtime");
+      throw new InternalServerErrorException("JWT_SECRET missing");
     }
 
-    if (ticket.kind === TicketKind.BAR && !(ticket.status === TicketStatus.OPEN || ticket.status === TicketStatus.CHECKOUT)) {
-      throw new BadRequestException("Ticket no listo para cobro");
+    const receiptToken = this.jwt.sign(
+      { type: "receipt", ticketId: ticket.id },
+      { secret, expiresIn: "10m" }
+    );
+
+    return {
+      ok: true,
+      receiptNumber: ticket.payment?.receiptNumber ?? 0,
+      total: ticket.payment?.totalAmount ?? 0,
+      receiptToken,
+      alreadyPaid: true,
+    };
+  }
+
+  // ✅ reglas de estado (no 500, solo 400 si corresponde)
+  if (ticket.kind === TicketKind.RENTAL && ticket.status !== TicketStatus.CHECKOUT) {
+    throw new BadRequestException("Debes cerrar arriendo antes de cobrar");
+  }
+
+  if (
+    ticket.kind === TicketKind.BAR &&
+    !(ticket.status === TicketStatus.OPEN || ticket.status === TicketStatus.CHECKOUT)
+  ) {
+    throw new BadRequestException("Ticket no listo para cobro");
+  }
+
+  const consumos = ticket.items.reduce((a, it) => a + Number(it.lineTotal), 0);
+  const rental = ticket.kind === TicketKind.RENTAL ? Number(ticket.rentalAmount ?? 0) : 0;
+  const total = roundUp100(consumos + rental);
+
+  // ✅ validar stock antes
+  for (const it of ticket.items) {
+    if (it.product.stock < it.qty) {
+      throw new BadRequestException(`Stock insuficiente: ${it.product.name}`);
     }
+  }
 
-    const consumos = ticket.items.reduce((a, it) => a + it.lineTotal, 0);
-    const rental = ticket.kind === TicketKind.RENTAL ? (ticket.rentalAmount ?? 0) : 0;
-    const total = roundUp100(consumos + rental);
-
-    for (const it of ticket.items) {
-      if (it.product.stock < it.qty) throw new BadRequestException(`Stock insuficiente: ${it.product.name}`);
-    }
-
-    const payment = await this.prisma.$transaction(async (tx) => {
+  // ✅ transacción atómica (si falla, NO queda pagado)
+  let payment;
+  try {
+    payment = await this.prisma.$transaction(async (tx) => {
       for (const it of ticket.items) {
         await tx.product.update({
           where: { id: it.productId },
@@ -244,27 +281,38 @@ export class TicketsService {
 
       return p;
     });
-
-    // ✅ token SOLO para voucher (hard-safe secret)
-    let receiptToken: string;
-    try {
-      const secret = process.env.JWT_SECRET;
-      if (!secret) {
-        console.error("❌ JWT_SECRET missing at checkout() runtime");
-        throw new Error("JWT_SECRET missing");
-      }
-
-      receiptToken = this.jwt.sign(
-        { type: "receipt", ticketId: ticket.id },
-        { secret, expiresIn: "10m" }
-      );
-    } catch (e) {
-      console.error("❌ Error generando receiptToken", e);
-      throw new InternalServerErrorException("Pago OK pero no se pudo generar voucher");
-    }
-
-    return { ok: true, receiptNumber: payment.receiptNumber, total, receiptToken };
+  } catch (e) {
+    console.error("❌ Checkout transaction failed", e);
+    throw new InternalServerErrorException("No se pudo completar el cobro");
   }
+
+  // ✅ generar token voucher (con secret explícito)
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.error("❌ JWT_SECRET missing at checkout() runtime");
+    throw new InternalServerErrorException("JWT_SECRET missing");
+  }
+
+  let receiptToken: string;
+  try {
+    receiptToken = this.jwt.sign(
+      { type: "receipt", ticketId: ticket.id },
+      { secret, expiresIn: "10m" }
+    );
+  } catch (e) {
+    console.error("❌ Error generando receiptToken", e);
+    // OJO: pago ya fue hecho, pero igual devolvemos error controlado:
+    throw new InternalServerErrorException("Pago OK pero no se pudo generar voucher");
+  }
+
+  return {
+    ok: true,
+    receiptNumber: payment.receiptNumber,
+    total,
+    receiptToken,
+  };
+}
+
 
   // ✅ mover ticket a otra mesa (mantiene tiempo y consumos)
   async moveTicket(ticketId: string, toTableId: number) {
