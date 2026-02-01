@@ -242,12 +242,24 @@ export class TicketsService {
     });
 
     let receiptToken: string;
+
     try {
-      receiptToken = this.jwt.sign({ type: "receipt", ticketId: ticket.id }, { expiresIn: "10m" });
+      const secret = process.env.JWT_SECRET;
+      if (!secret) {
+      console.error("❌ JWT_SECRET missing at checkout()");
+      throw new Error("JWT_SECRET missing");
+      }
+
+     // ✅ FORZAMOS SECRET AQUÍ (esto evita el bug aunque JwtService venga sin config)
+     receiptToken = this.jwt.sign(
+       { type: "receipt", ticketId: ticket.id },
+       { secret, expiresIn: "10m" }
+      );
     } catch (e) {
       console.error("❌ Error generando receiptToken", e);
       throw new InternalServerErrorException("Pago OK pero no se pudo generar voucher");
     }
+
 
     return { ok: true, receiptNumber: payment.receiptNumber, total, receiptToken };
   }
