@@ -11,12 +11,12 @@ import {
 } from "@nestjs/common";
 import { Response } from "express";
 import { TicketsService } from "./tickets.service";
-import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { AuthGuard } from "../auth/auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../auth/roles.decorator";
 import { Role } from "@prisma/client";
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(AuthGuard, RolesGuard)
 @Controller()
 export class TicketsController {
   constructor(private svc: TicketsService) {}
