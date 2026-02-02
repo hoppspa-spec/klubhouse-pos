@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, API_URL } from "@/lib/api";
 
+type Role = "MASTER" | "SLAVE" | "SELLER";
+
 type Product = { id: string; name: string; category: string; price: number; stock: number; isActive: boolean };
 type TicketItem = { id: string; productId: string; qty: number; unitPrice: number; lineTotal: number; product: Product };
 type Ticket = {
@@ -49,6 +51,21 @@ export default function TicketPage() {
   // mover mesa UI
   const [moveOpen, setMoveOpen] = useState(false);
   const [tables, setTables] = useState<TableState[]>([]);
+
+  // ✅ user/role desde localStorage
+  const user = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      return JSON.parse(localStorage.getItem("user") || "null");
+    } catch {
+      return null;
+    }
+  }, []);
+  const role: Role | undefined = user?.role;
+  const displayName: string | undefined = user?.name || user?.username;
+
+  const isManager = role === "MASTER" || role === "SLAVE";
+  const isSeller = role === "SELLER";
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -110,7 +127,6 @@ export default function TicketPage() {
   useEffect(() => {
     if (!ticket) return;
 
-    // si está abierto, el tiempo corre
     if (ticket.kind === "RENTAL" && ticket.status === "OPEN" && ticket.startedAt) {
       const tick = () => setLiveMinutes(diffMinutes(ticket.startedAt!, new Date()));
       tick();
@@ -118,7 +134,6 @@ export default function TicketPage() {
       return () => clearInterval(i);
     }
 
-    // si ya está cerrado / checkout / paid, usar lo final si existe
     if (ticket.kind === "RENTAL" && ticket.minutesPlayed != null) {
       setLiveMinutes(ticket.minutesPlayed);
       return;
@@ -162,7 +177,7 @@ export default function TicketPage() {
 
   async function checkout(method: "CASH" | "DEBIT") {
     if (!ticket) return;
-    if (loading) return; // ✅ anti doble click
+    if (loading) return;
     setLoading(true);
     setErr(null);
 
@@ -172,15 +187,12 @@ export default function TicketPage() {
         receiptNumber: number;
         total: number;
         receiptToken: string;
-        alreadyPaid?: boolean;
       }>(`/tickets/${ticket.id}/checkout`, {
         method: "POST",
         body: JSON.stringify({ method }),
       });
 
       const url = `${API_URL}/tickets/${ticket.id}/receipt?token=${encodeURIComponent(res.receiptToken)}`;
-
-      // ✅ misma ventana (modo POS)
       window.location.assign(url);
     } catch (e: any) {
       console.error(e);
@@ -198,7 +210,6 @@ export default function TicketPage() {
 
   async function doMove(toTableId: number) {
     if (!ticket) return;
-    if (loading) return;
     setLoading(true);
     setErr(null);
     try {
@@ -225,12 +236,15 @@ export default function TicketPage() {
     );
   }
 
-  const canCloseRental = ticket.kind === "RENTAL" && ticket.status === "OPEN";
+  // ✅ Gates alineados al backend
+  const canCloseRental = isManager && ticket.kind === "RENTAL" && ticket.status === "OPEN";
   const canCheckout =
-    (ticket.kind === "BAR" && (ticket.status === "OPEN" || ticket.status === "CHECKOUT")) ||
-    (ticket.kind === "RENTAL" && ticket.status === "CHECKOUT");
+    isManager &&
+    ((ticket.kind === "BAR" && (ticket.status === "OPEN" || ticket.status === "CHECKOUT")) ||
+      (ticket.kind === "RENTAL" && ticket.status === "CHECKOUT"));
 
-  const canMove = ticket.status === "OPEN" || ticket.status === "CHECKOUT";
+  const canMove = isManager && (ticket.status === "OPEN" || ticket.status === "CHECKOUT");
+
   const showLiveTime = ticket.kind === "RENTAL" && liveMinutes != null;
 
   return (
@@ -240,7 +254,26 @@ export default function TicketPage() {
           <div style={{ fontWeight: 900, fontSize: 20 }}>
             {ticket.table.name} · {ticket.kind} · {ticket.status}
           </div>
-          <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>Ticket: {ticket.id}</div>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
+            <div style={{ color: "#bdbdbd", fontSize: 12 }}>Ticket: {ticket.id}</div>
+
+            {/* ✅ Badge rol */}
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 900,
+                border: "1px solid #222",
+                background: "#111",
+                color: isSeller ? "#bdbdbd" : "#f5c400",
+                borderRadius: 999,
+                padding: "4px 10px",
+              }}
+            >
+              {displayName ? `${displayName} · ` : ""}
+              {role || "NO_ROLE"}
+            </div>
+          </div>
         </div>
 
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -254,24 +287,10 @@ export default function TicketPage() {
 
       {/* Totals */}
       <div style={{ marginTop: 14, background: "#0d0d0d", border: "1px solid #222", borderRadius: 14, padding: 14 }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
-        >
-          <div>
-            Consumos: <b>${totals?.consumos ?? 0}</b>
-          </div>
-          <div>
-            Arriendo: <b>${totals?.rental ?? 0}</b>
-          </div>
-          <div style={{ fontSize: 16 }}>
-            TOTAL: <b>${totals?.total ?? 0}</b>
-          </div>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div>Consumos: <b>${totals?.consumos ?? 0}</b></div>
+          <div>Arriendo: <b>${totals?.rental ?? 0}</b></div>
+          <div style={{ fontSize: 16 }}>TOTAL: <b>${totals?.total ?? 0}</b></div>
 
           {showLiveTime && (
             <div
@@ -291,28 +310,35 @@ export default function TicketPage() {
           )}
         </div>
 
-        <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {canMove && (
-            <button onClick={openMove} disabled={loading} style={btnSecondary()}>
-              Cambiar mesa
+        {/* ✅ Acciones: solo manager/admin */}
+        {isManager ? (
+          <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {canMove && (
+              <button onClick={openMove} disabled={loading} style={btnSecondary()}>
+                Cambiar mesa
+              </button>
+            )}
+
+            {canCloseRental && (
+              <button onClick={closeRental} disabled={loading} style={btnSecondary()}>
+                Cerrar arriendo (calcular tiempo)
+              </button>
+            )}
+
+            <button onClick={() => checkout("CASH")} disabled={loading || !canCheckout} style={btn()}>
+              Cobrar CASH
             </button>
-          )}
-
-          {canCloseRental && (
-            <button onClick={closeRental} disabled={loading} style={btnSecondary()}>
-              Cerrar arriendo (calcular tiempo)
+            <button onClick={() => checkout("DEBIT")} disabled={loading || !canCheckout} style={btn()}>
+              Cobrar DEBIT
             </button>
-          )}
+          </div>
+        ) : (
+          <div style={{ marginTop: 12, color: "#bdbdbd", fontSize: 12 }}>
+            * Modo vendedor: puedes agregar consumos. Para cerrar/cobrar llama al manager.
+          </div>
+        )}
 
-          <button onClick={() => checkout("CASH")} disabled={loading || !canCheckout} style={btn()}>
-            Cobrar CASH
-          </button>
-          <button onClick={() => checkout("DEBIT")} disabled={loading || !canCheckout} style={btn()}>
-            Cobrar DEBIT
-          </button>
-        </div>
-
-        {!canCheckout && (
+        {isManager && !canCheckout && (
           <div style={{ marginTop: 8, color: "#bdbdbd", fontSize: 12 }}>
             * Para RENTAL debes cerrar arriendo antes de cobrar. BAR puede cobrar directo.
           </div>
@@ -394,7 +420,7 @@ export default function TicketPage() {
       </div>
 
       {/* Modal mover mesa */}
-      {moveOpen && (
+      {moveOpen && isManager && (
         <div
           onClick={() => setMoveOpen(false)}
           style={{
@@ -430,7 +456,9 @@ export default function TicketPage() {
               ))}
             </div>
 
-            {freeTablesSameType.length === 0 && <div style={{ marginTop: 12, color: "#bdbdbd" }}>No hay mesas libres para mover.</div>}
+            {freeTablesSameType.length === 0 && (
+              <div style={{ marginTop: 12, color: "#bdbdbd" }}>No hay mesas libres para mover.</div>
+            )}
 
             <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button onClick={() => setMoveOpen(false)} disabled={loading} style={btnSecondary()}>
