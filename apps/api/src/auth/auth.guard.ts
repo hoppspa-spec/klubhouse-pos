@@ -7,7 +7,7 @@ export class AuthGuard implements CanActivate {
 
   canActivate(ctx: ExecutionContext) {
     const req = ctx.switchToHttp().getRequest();
-    const auth = req.headers["authorization"] || "";
+    const auth = req.headers?.authorization ?? "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
 
     if (!token || token === "undefined") {
@@ -15,12 +15,15 @@ export class AuthGuard implements CanActivate {
     }
 
     try {
-      const payload = this.jwt.verify(token, {
-        secret: process.env.JWT_SECRET || "dev_secret_123",
-      });
+      // ✅ NO PASAR SECRET ACÁ
+      // usa el JwtGlobalModule
+      const payload = this.jwt.verify(token);
+
+      // payload = { sub, username, role, name, iat, exp }
       req.user = payload;
+
       return true;
-    } catch {
+    } catch (e) {
       throw new UnauthorizedException("Invalid token");
     }
   }

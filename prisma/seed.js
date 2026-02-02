@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 
@@ -6,13 +7,13 @@ const prisma = new PrismaClient();
 async function upsertUser({ username, name, role, password }) {
   const passwordHash = await bcrypt.hash(password, 10);
 
-  await prisma.user.upsert({
+  return prisma.user.upsert({
     where: { username },
     update: {
       name,
       role,
       isActive: true,
-      passwordHash, // ✅ importante: si alguna vez quedó malo, lo repara
+      passwordHash,
     },
     create: {
       username,
@@ -25,64 +26,26 @@ async function upsertUser({ username, name, role, password }) {
 }
 
 async function main() {
-  // --------------------
-  // USERS (LOGIN OK)
-  // --------------------
-  await upsertUser({
-    username: "admin",
-    name: "Dueño",
-    role: "MASTER",
-    password: "admin1234",
-  });
+  // ✅ Define credenciales iniciales
+  // Recomendación: después cambia estas claves (pero para el torneo quedan filete).
+  const users = [
+    { username: "admin", name: "Dueño", role: "MASTER", password: "Admin#9021!" },
+    { username: "manager", name: "Manager", role: "SLAVE", password: "Manager#4827!" },
 
-  await upsertUser({
-    username: "manager",
-    name: "Gerente",
-    role: "SLAVE",
-    password: "manager1234",
-  });
-
-  await upsertUser({
-    username: "seller1",
-    name: "Vendedor 1",
-    role: "SELLER",
-    password: "seller1234",
-  });
-
-  console.log("✅ Seed users OK");
-
-  // --------------------
-  // PRODUCTS
-  // --------------------
-  const products = [
-    { name: "Bebida", category: "BEBIDAS", price: 1200, stock: 120, stockCritical: 10, isActive: true },
-    { name: "Cigarro", category: "CIGARROS", price: 300, stock: 200, stockCritical: 20, isActive: true },
-
-    { name: "Cerveza Heineken", category: "CERVEZAS", price: 1800, stock: 48, stockCritical: 12, isActive: true },
-    { name: "Cerveza Cristal", category: "CERVEZAS", price: 1800, stock: 48, stockCritical: 12, isActive: true },
-    { name: "Cerveza Escudo", category: "CERVEZAS", price: 1800, stock: 48, stockCritical: 12, isActive: true },
-    { name: "Cerveza Budweiser", category: "CERVEZAS", price: 1800, stock: 48, stockCritical: 12, isActive: true },
-
-    { name: "Johnny + bebida", category: "COMBINADOS", price: 3500, stock: 60, stockCritical: 10, isActive: true },
-    { name: "Johnny + energética", category: "COMBINADOS", price: 4500, stock: 60, stockCritical: 10, isActive: true },
-    { name: "Ron + bebida", category: "COMBINADOS", price: 3000, stock: 60, stockCritical: 10, isActive: true },
+    { username: "seller1", name: "Seller 1", role: "SELLER", password: "Seller1#1359!" },
+    { username: "seller2", name: "Seller 2", role: "SELLER", password: "Seller2#2468!" },
+    { username: "seller3", name: "Seller 3", role: "SELLER", password: "Seller3#9753!" },
+    { username: "seller4", name: "Seller 4", role: "SELLER", password: "Seller4#8642!" },
+    { username: "seller5", name: "Seller 5", role: "SELLER", password: "Seller5#1127!" },
+    { username: "seller6", name: "Seller 6", role: "SELLER", password: "Seller6#7751!" },
   ];
 
-  for (const p of products) {
-    await prisma.product.upsert({
-      where: { name: p.name },
-      update: {
-        category: p.category,
-        price: p.price,
-        stock: p.stock,
-        stockCritical: p.stockCritical,
-        isActive: p.isActive,
-      },
-      create: p,
-    });
+  for (const u of users) {
+    await upsertUser(u);
   }
 
-  console.log("✅ Seed products OK");
+  console.log("✅ Seed users OK:");
+  users.forEach((u) => console.log(`- ${u.role} | ${u.username} | ${u.password}`));
 }
 
 main()

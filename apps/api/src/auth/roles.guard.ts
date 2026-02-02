@@ -1,22 +1,30 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import { ROLES_KEY } from './roles.decorator';
+import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import { Role } from "@prisma/client";
+import { ROLES_KEY } from "./roles.decorator";
 
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
-  canActivate(context: ExecutionContext) {
-    const roles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
-      context.getHandler(),
-      context.getClass(),
+  canActivate(ctx: ExecutionContext): boolean {
+    const required = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
+      ctx.getHandler(),
+      ctx.getClass(),
     ]);
 
-    if (!roles?.length) return true;
+    // si no pide roles, pasa
+    if (!required || required.length === 0) return true;
 
-    const req = context.switchToHttp().getRequest();
-    const userRole = req.user?.role;
-    if (!userRole || !roles.includes(userRole)) throw new ForbiddenException('Forbidden');
-    return true;
+    const req = ctx.switchToHttp().getRequest();
+    const user = req.user;
+
+    // si no hay user, no pasa
+    if (!user?.role) return false;
+
+    // MASTER siempre pasa
+    if (user.role === Role.MASTER) return true;
+
+    return required.includes(user.role);
   }
 }

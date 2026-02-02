@@ -73,3 +73,4 @@ export class TicketsPublicController {
     return res.send(html);
   }
 }
+

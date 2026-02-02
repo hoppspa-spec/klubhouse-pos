@@ -19,16 +19,26 @@ export class AuthService {
       throw new UnauthorizedException("Usuario o clave incorrecta");
     }
 
-    const payload = { sub: user.id, username: user.username, role: user.role };
+    // ✅ IMPORTANTE: el role VA en el token para RolesGuard
+    const payload = {
+      sub: user.id,
+      username: user.username,
+      role: user.role,
+      name: user.name,
+    };
 
-    const accessToken = await this.jwt.signAsync(payload, {
-      secret: process.env.JWT_SECRET || "dev_secret_123",
-      expiresIn: "15m",
-    });
+    // ✅ Usa el JwtGlobalModule (secret viene de ahí)
+    const accessToken = this.jwt.sign(payload);
 
     return {
       accessToken,
-      user: { id: user.id, username: user.username, role: user.role },
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        name: user.name,
+      },
     };
   }
 }
+
