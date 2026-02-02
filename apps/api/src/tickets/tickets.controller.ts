@@ -1,13 +1,23 @@
-import { Body, Controller, Get, Param, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 import { Response } from "express";
 import { TicketsService } from "./tickets.service";
-import { AuthGuard } from "../auth/auth.guard";
+import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../auth/roles.decorator";
 import { Role } from "@prisma/client";
 
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller()
-@UseGuards(AuthGuard, RolesGuard)
 export class TicketsController {
   constructor(private svc: TicketsService) {}
 
@@ -28,8 +38,18 @@ export class TicketsController {
   // ✅ Agregar/quitar items (SELLER sí puede)
   @Post("tickets/:id/items")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
-  addItem(@Param("id") id: string, @Body() body: { productId: string; qtyDelta: number }) {
+  addItem(
+    @Param("id") id: string,
+    @Body() body: { productId: string; qtyDelta: number }
+  ) {
     return this.svc.addItem(id, body.productId, body.qtyDelta);
+  }
+
+  // ✅ Ver ticket + totales (SELLER sí puede)
+  @Get("tickets/:id")
+  @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
+  getOne(@Param("id") id: string) {
+    return this.svc.getTicketWithTotals(id);
   }
 
   // ✅ Cerrar arriendo (SOLO ADMIN/MANAGER)
@@ -42,7 +62,11 @@ export class TicketsController {
   // ✅ Checkout / Cobrar (SOLO ADMIN/MANAGER)
   @Post("tickets/:id/checkout")
   @Roles(Role.MASTER, Role.SLAVE)
-  checkout(@Req() req: any, @Param("id") id: string, @Body() body: { method: "CASH" | "DEBIT" }) {
+  checkout(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: { method: "CASH" | "DEBIT" }
+  ) {
     return this.svc.checkout(id, req.user.sub, body.method);
   }
 
@@ -52,13 +76,6 @@ export class TicketsController {
   move(@Param("id") id: string, @Body() body: { toTableId: number }) {
     return this.svc.moveTicket(id, body.toTableId);
   }
-
-  // ✅ Ver ticket + totales (SELLER sí puede)
-  @Get("tickets/:id")
-  @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
-  getOne(@Param("id") id: string) {
-    return this.svc.getTicketWithTotals(id);
-  }
 }
 
 // ✅ Controller público SOLO para voucher (sin guards)
@@ -67,10 +84,13 @@ export class TicketsPublicController {
   constructor(private svc: TicketsService) {}
 
   @Get("tickets/:id/receipt")
-  async receipt(@Param("id") id: string, @Query("token") token: string, @Res() res: Response) {
+  async receipt(
+    @Param("id") id: string,
+    @Query("token") token: string,
+    @Res() res: Response
+  ) {
     const html = await this.svc.receiptHtmlWithToken(id, token);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.send(html);
   }
 }
-
