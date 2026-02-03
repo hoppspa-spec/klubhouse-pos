@@ -237,13 +237,15 @@ export default function TicketPage() {
   }
 
   // ✅ Gates alineados al backend
-  const canCloseRental = isManager && ticket.kind === "RENTAL" && ticket.status === "OPEN";
   const canCheckout =
-    isManager &&
-    ((ticket.kind === "BAR" && (ticket.status === "OPEN" || ticket.status === "CHECKOUT")) ||
-      (ticket.kind === "RENTAL" && ticket.status === "CHECKOUT"));
+  (ticket.kind === "BAR" &&
+    (ticket.status === "OPEN" || ticket.status === "CHECKOUT")) ||
+  (ticket.kind === "RENTAL" &&
+    (ticket.status === "CHECKOUT" ||
+      (isSeller && ticket.status === "OPEN")));
 
-  const canMove = isManager && (ticket.status === "OPEN" || ticket.status === "CHECKOUT");
+   const canCloseRental = isManager && ticket.kind === "RENTAL" && ticket.status === "OPEN";
+   const canMove = isManager && (ticket.status === "OPEN" || ticket.status === "CHECKOUT");
 
   const showLiveTime = ticket.kind === "RENTAL" && liveMinutes != null;
 
