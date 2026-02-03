@@ -174,24 +174,23 @@ export class TicketsService {
   // =========================
   // CHECKOUT
   // =========================
-  async checkout(
-    ticketId: string,
-    userId: string,
-    method: "CASH" | "DEBIT",
-    role: Role
-  ) {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
-      include: { items: { include: { product: true } } },
-    });
-    if (!ticket) throw new NotFoundException("Ticket no existe");
-    if (ticket.status === TicketStatus.PAID) throw new BadRequestException("Ya pagado");
+  async checkout(ticketId: string, userId: string, method: "CASH" | "DEBIT", role: Role) {
+  const ticket = await this.prisma.ticket.findUnique({
+    where: { id: ticketId },
+    include: { items: { include: { product: true } }, table: true, openedBy: true },
+  });
 
-    // RENTAL auto-cierre para SELLER
-    if (ticket.kind === TicketKind.RENTAL && ticket.status === TicketStatus.OPEN) {
+  if (!ticket) throw new NotFoundException("Ticket no existe");
+  if (ticket.status === TicketStatus.PAID) throw new BadRequestException("Ticket ya pagado");
+
+  // ✅ RENTAL: si seller cobra en OPEN => auto-cierra
+  if (ticket.kind === TicketKind.RENTAL) {
+    if (ticket.status === TicketStatus.OPEN) {
       if (role === Role.SELLER) {
+        if (!ticket.startedAt) throw new BadRequestException("Ticket sin inicio");
+
         const endedAt = new Date();
-        const minutes = calcMinutes(ticket.startedAt!, endedAt);
+        const minutes = calcMinutes(ticket.startedAt, endedAt);
         const rental = calcRental(minutes);
 
         await this.prisma.ticket.update({
@@ -203,47 +202,82 @@ export class TicketsService {
             status: TicketStatus.CHECKOUT,
           },
         });
+
+        ticket.status = TicketStatus.CHECKOUT;
+        ticket.minutesPlayed = minutes;
+        ticket.rentalAmount = rental;
       } else {
-        throw new BadRequestException("Debes cerrar arriendo");
+        throw new BadRequestException("Debes cerrar arriendo antes de cobrar");
       }
     }
 
-    if (ticket.kind === TicketKind.RENTAL && ticket.status !== TicketStatus.CHECKOUT) {
-      throw new BadRequestException("Ticket no listo");
+    if (ticket.status !== TicketStatus.CHECKOUT) {
+      throw new BadRequestException("Ticket no listo para cobro");
+    }
+  }
+
+  // ✅ BAR: seller/manager pueden cobrar si OPEN o CHECKOUT
+  if (
+    ticket.kind === TicketKind.BAR &&
+    ticket.status !== TicketStatus.OPEN &&
+    ticket.status !== TicketStatus.CHECKOUT
+  ) {
+    throw new BadRequestException("Ticket no listo para cobro");
+  }
+
+  const consumos = ticket.items.reduce((a, it) => a + it.lineTotal, 0);
+  const rental = ticket.kind === TicketKind.RENTAL ? ticket.rentalAmount ?? 0 : 0;
+  const total = roundUp100(consumos + rental);
+
+  for (const it of ticket.items) {
+    if (it.product.stock < it.qty) {
+      throw new BadRequestException(`Stock insuficiente: ${it.product.name}`);
+    }
+  }
+
+  const payment = await this.prisma.$transaction(async (tx) => {
+    for (const it of ticket.items) {
+      await tx.product.update({
+        where: { id: it.productId },
+        data: { stock: { decrement: it.qty } },
+      });
+
+      await tx.stockMovement.create({
+        data: {
+          productId: it.productId,
+          type: "OUT",
+          qty: it.qty,
+          reason: `Venta ticket ${ticket.id}`,
+          createdById: userId,
+        },
+      });
     }
 
-    const consumos = ticket.items.reduce((a, i) => a + i.lineTotal, 0);
-    const rental = ticket.rentalAmount ?? 0;
-    const total = roundUp100(consumos + rental);
-
-    const payment = await this.prisma.$transaction(async (tx) => {
-      for (const it of ticket.items) {
-        await tx.product.update({
-          where: { id: it.productId },
-          data: { stock: { decrement: it.qty } },
-        });
-      }
-
-      const p = await tx.payment.create({
-        data: { ticketId, method, totalAmount: total, paidById: userId },
-      });
-
-      await tx.ticket.update({
-        where: { id: ticketId },
-        data: { status: TicketStatus.PAID },
-      });
-
-      return p;
+    const p = await tx.payment.create({
+      data: {
+        ticketId: ticket.id,
+        method: method as any,
+        totalAmount: total,
+        paidById: userId,
+      },
     });
 
-    const secret = process.env.JWT_SECRET!;
-    const receiptToken = this.jwt.sign(
-      { type: "receipt", ticketId },
-      { expiresIn: "10m", secret }
-    );
+    await tx.ticket.update({
+      where: { id: ticket.id },
+      data: { status: TicketStatus.PAID },
+    });
 
-    return { ok: true, receiptNumber: payment.receiptNumber, total, receiptToken };
-  }
+    return p;
+  });
+
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new InternalServerErrorException("JWT_SECRET no configurado");
+
+  const receiptToken = this.jwt.sign({ type: "receipt", ticketId: ticket.id }, { expiresIn: "10m", secret });
+
+  return { ok: true, receiptNumber: payment.receiptNumber, total, receiptToken };
+}
+
 
   // =========================
   // MOVE

@@ -6,8 +6,24 @@ import { api, API_URL } from "@/lib/api";
 
 type Role = "MASTER" | "SLAVE" | "SELLER";
 
-type Product = { id: string; name: string; category: string; price: number; stock: number; isActive: boolean };
-type TicketItem = { id: string; productId: string; qty: number; unitPrice: number; lineTotal: number; product: Product };
+type Product = {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  stock: number;
+  isActive: boolean;
+};
+
+type TicketItem = {
+  id: string;
+  productId: string;
+  qty: number;
+  unitPrice: number;
+  lineTotal: number;
+  product: Product;
+};
+
 type Ticket = {
   id: string;
   kind: "RENTAL" | "BAR";
@@ -61,6 +77,7 @@ export default function TicketPage() {
       return null;
     }
   }, []);
+
   const role: Role | undefined = user?.role;
   const displayName: string | undefined = user?.name || user?.username;
 
@@ -160,6 +177,7 @@ export default function TicketPage() {
     }
   }
 
+  // ❌ SELLER no usa esto (pero lo dejamos para manager)
   async function closeRental() {
     if (!ticket) return;
     setLoading(true);
@@ -178,6 +196,7 @@ export default function TicketPage() {
   async function checkout(method: "CASH" | "DEBIT") {
     if (!ticket) return;
     if (loading) return;
+
     setLoading(true);
     setErr(null);
 
@@ -193,7 +212,14 @@ export default function TicketPage() {
       });
 
       const url = `${API_URL}/tickets/${ticket.id}/receipt?token=${encodeURIComponent(res.receiptToken)}`;
-      window.location.assign(url);
+
+      // 🧾 abrir voucher en nueva ventana
+      window.open(url, "_blank", "noopener,noreferrer");
+
+      // 🏠 volver al home POS
+      setTimeout(() => {
+        window.location.href = "/tables";
+      }, 300);
     } catch (e: any) {
       console.error(e);
       setErr(e?.message || "No pude cobrar.");
@@ -236,17 +262,17 @@ export default function TicketPage() {
     );
   }
 
-  // ✅ Gates alineados al backend
+  // ✅ Gates:
+  // - BAR: SELLER/MANAGER pueden cobrar si OPEN o CHECKOUT
+  // - RENTAL: MANAGER puede cobrar si CHECKOUT
+  // - RENTAL: SELLER puede cobrar si OPEN (auto-cierra en backend) o CHECKOUT
   const canCheckout =
-  (ticket.kind === "BAR" &&
-    (ticket.status === "OPEN" || ticket.status === "CHECKOUT")) ||
-  (ticket.kind === "RENTAL" &&
-    (ticket.status === "CHECKOUT" ||
-      (isSeller && ticket.status === "OPEN")));
+    (ticket.kind === "BAR" && (ticket.status === "OPEN" || ticket.status === "CHECKOUT")) ||
+    (ticket.kind === "RENTAL" &&
+      (ticket.status === "CHECKOUT" || (isSeller && ticket.status === "OPEN")));
 
-   const canCloseRental = isManager && ticket.kind === "RENTAL" && ticket.status === "OPEN";
-   const canMove = isManager && (ticket.status === "OPEN" || ticket.status === "CHECKOUT");
-
+  const canCloseRental = isManager && ticket.kind === "RENTAL" && ticket.status === "OPEN";
+  const canMove = isManager && (ticket.status === "OPEN" || ticket.status === "CHECKOUT");
   const showLiveTime = ticket.kind === "RENTAL" && liveMinutes != null;
 
   return (
@@ -260,7 +286,6 @@ export default function TicketPage() {
           <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
             <div style={{ color: "#bdbdbd", fontSize: 12 }}>Ticket: {ticket.id}</div>
 
-            {/* ✅ Badge rol */}
             <div
               style={{
                 fontSize: 12,
@@ -290,9 +315,15 @@ export default function TicketPage() {
       {/* Totals */}
       <div style={{ marginTop: 14, background: "#0d0d0d", border: "1px solid #222", borderRadius: 14, padding: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <div>Consumos: <b>${totals?.consumos ?? 0}</b></div>
-          <div>Arriendo: <b>${totals?.rental ?? 0}</b></div>
-          <div style={{ fontSize: 16 }}>TOTAL: <b>${totals?.total ?? 0}</b></div>
+          <div>
+            Consumos: <b>${totals?.consumos ?? 0}</b>
+          </div>
+          <div>
+            Arriendo: <b>${totals?.rental ?? 0}</b>
+          </div>
+          <div style={{ fontSize: 16 }}>
+            TOTAL: <b>${totals?.total ?? 0}</b>
+          </div>
 
           {showLiveTime && (
             <div
@@ -312,37 +343,31 @@ export default function TicketPage() {
           )}
         </div>
 
-        {/* ✅ Acciones: solo manager/admin */}
-        {isManager ? (
-          <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {canMove && (
-              <button onClick={openMove} disabled={loading} style={btnSecondary()}>
-                Cambiar mesa
-              </button>
-            )}
-
-            {canCloseRental && (
-              <button onClick={closeRental} disabled={loading} style={btnSecondary()}>
-                Cerrar arriendo (calcular tiempo)
-              </button>
-            )}
-
-            <button onClick={() => checkout("CASH")} disabled={loading || !canCheckout} style={btn()}>
-              Cobrar CASH
+        {/* ✅ Acciones */}
+        <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {isManager && canMove && (
+            <button onClick={openMove} disabled={loading} style={btnSecondary()}>
+              Cambiar mesa
             </button>
-            <button onClick={() => checkout("DEBIT")} disabled={loading || !canCheckout} style={btn()}>
-              Cobrar DEBIT
-            </button>
-          </div>
-        ) : (
-          <div style={{ marginTop: 12, color: "#bdbdbd", fontSize: 12 }}>
-            * Modo vendedor: puedes agregar consumos. Para cerrar/cobrar llama al manager.
-          </div>
-        )}
+          )}
 
-        {isManager && !canCheckout && (
+          {isManager && canCloseRental && (
+            <button onClick={closeRental} disabled={loading} style={btnSecondary()}>
+              Cerrar arriendo (calcular tiempo)
+            </button>
+          )}
+
+          <button onClick={() => checkout("CASH")} disabled={loading || !canCheckout} style={btn()}>
+            Cobrar CASH
+          </button>
+          <button onClick={() => checkout("DEBIT")} disabled={loading || !canCheckout} style={btn()}>
+            Cobrar DEBIT
+          </button>
+        </div>
+
+        {isSeller && (
           <div style={{ marginTop: 8, color: "#bdbdbd", fontSize: 12 }}>
-            * Para RENTAL debes cerrar arriendo antes de cobrar. BAR puede cobrar directo.
+            * Modo vendedor: no puedes mover mesas ni cerrar manualmente. RENTAL se cierra solo al cobrar.
           </div>
         )}
       </div>
