@@ -29,16 +29,12 @@ export class TicketsController {
     return this.svc.addItem(id, body.productId, body.qtyDelta);
   }
 
+  // ✅ SELLER SÍ puede cobrar
   @Post("tickets/:id/checkout")
-@Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
-checkout(
-  @Req() req: any,
-  @Param("id") id: string,
-  @Body() body: { method: "CASH" | "DEBIT" }
-) {
-  return this.svc.checkout(id, req.user.sub, body.method, req.user.role as Role);
-}
-
+  @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
+  checkout(@Req() req: any, @Param("id") id: string, @Body() body: { method: "CASH" | "DEBIT" }) {
+    return this.svc.checkout(id, req.user.sub, body.method, req.user.role as Role);
+  }
 
   @Get("tickets/:id")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
@@ -47,6 +43,7 @@ checkout(
   }
 }
 
+// ✅ Público: voucher sin guards
 @Controller()
 export class TicketsPublicController {
   constructor(private svc: TicketsService) {}
