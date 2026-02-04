@@ -43,9 +43,9 @@ export class TicketsController {
   }
 }
 
-// ✅ Público: voucher sin guards
-@Controller()
-export class TicketsPublicController {
+  // ✅ Público: voucher sin guards
+  @Controller()
+  export class TicketsPublicController {
   constructor(private svc: TicketsService) {}
 
   @Get("tickets/:id/receipt")
