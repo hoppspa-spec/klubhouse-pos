@@ -1,29 +1,13 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, API_URL } from "@/lib/api";
 
 type Role = "MASTER" | "SLAVE" | "SELLER";
 
-type Product = {
-  id: string;
-  name: string;
-  category: string;
-  price: number;
-  stock: number;
-  isActive: boolean;
-};
-
-type TicketItem = {
-  id: string;
-  productId: string;
-  qty: number;
-  unitPrice: number;
-  lineTotal: number;
-  product: Product;
-};
-
+type Product = { id: string; name: string; category: string; price: number; stock: number; isActive: boolean };
+type TicketItem = { id: string; productId: string; qty: number; unitPrice: number; lineTotal: number; product: Product };
 type Ticket = {
   id: string;
   kind: "RENTAL" | "BAR";
@@ -61,14 +45,11 @@ export default function TicketPage() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // ⏱️ live time
   const [liveMinutes, setLiveMinutes] = useState<number | null>(null);
 
-  // mover mesa UI
   const [moveOpen, setMoveOpen] = useState(false);
   const [tables, setTables] = useState<TableState[]>([]);
 
-  // ✅ user/role desde localStorage
   const user = useMemo(() => {
     if (typeof window === "undefined") return null;
     try {
@@ -78,19 +59,8 @@ export default function TicketPage() {
     }
   }, []);
 
-  // ✅ fallback: por si el memo corre antes de que localStorage se setee (raro, pero pasa)
-  const [userLive, setUserLive] = useState<any>(user);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      setUserLive(JSON.parse(localStorage.getItem("user") || "null"));
-    } catch {
-      setUserLive(null);
-    }
-  }, []);
-
-  const role: Role | undefined = (userLive?.role || user?.role) as Role | undefined;
-  const displayName: string | undefined = userLive?.name || userLive?.username || user?.name || user?.username;
+  const role: Role | undefined = user?.role;
+  const displayName: string | undefined = user?.name || user?.username;
 
   const isManager = role === "MASTER" || role === "SLAVE";
   const isSeller = role === "SELLER";
@@ -131,7 +101,7 @@ export default function TicketPage() {
       setProducts(cleaned);
     } catch (e) {
       console.error(e);
-      setErr("No pude cargar ticket / productos.");
+      setErr("No pude cargar ticket / productos. (¿token vencido?)");
     }
   }
 
@@ -151,7 +121,6 @@ export default function TicketPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // ⏱️ Live timer effect
   useEffect(() => {
     if (!ticket) return;
 
@@ -188,7 +157,6 @@ export default function TicketPage() {
     }
   }
 
-  // ❌ SELLER no usa esto (pero lo dejamos para manager)
   async function closeRental() {
     if (!ticket) return;
     setLoading(true);
@@ -212,22 +180,19 @@ export default function TicketPage() {
     setErr(null);
 
     try {
-      const res = await api<{
-        ok: boolean;
-        receiptNumber: number;
-        total: number;
-        receiptToken: string;
-      }>(`/tickets/${ticket.id}/checkout`, {
-        method: "POST",
-        body: JSON.stringify({ method }),
-      });
+      const res = await api<{ ok: boolean; receiptNumber: number; total: number; receiptToken: string }>(
+        `/tickets/${ticket.id}/checkout`,
+        { method: "POST", body: JSON.stringify({ method }) }
+      );
 
       const url = `${API_URL}/tickets/${ticket.id}/receipt?token=${encodeURIComponent(res.receiptToken)}`;
 
-      // 🧾 abrir voucher en nueva ventana
-      window.open(url, "_blank", "noopener,noreferrer");
+      // 🧾 abrir voucher en ventana nueva
+      const w = window.open(url, "_blank", "noopener,noreferrer");
+      // fallback si el navegador bloquea popups
+      if (!w) window.location.assign(url);
 
-      // 🏠 volver al home POS
+      // 🏠 volver a mesas
       setTimeout(() => {
         window.location.href = "/tables";
       }, 250);
@@ -274,9 +239,6 @@ export default function TicketPage() {
   }
 
   // ✅ Gates:
-  // - BAR: SELLER/MANAGER pueden cobrar si OPEN o CHECKOUT
-  // - RENTAL: MANAGER puede cobrar si CHECKOUT
-  // - RENTAL: SELLER puede cobrar si OPEN (auto-cierra en backend) o CHECKOUT
   const canCheckout =
     (ticket.kind === "BAR" && (ticket.status === "OPEN" || ticket.status === "CHECKOUT")) ||
     (ticket.kind === "RENTAL" && (ticket.status === "CHECKOUT" || (isSeller && ticket.status === "OPEN")));
@@ -325,15 +287,9 @@ export default function TicketPage() {
       {/* Totals */}
       <div style={{ marginTop: 14, background: "#0d0d0d", border: "1px solid #222", borderRadius: 14, padding: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <div>
-            Consumos: <b>${totals?.consumos ?? 0}</b>
-          </div>
-          <div>
-            Arriendo: <b>${totals?.rental ?? 0}</b>
-          </div>
-          <div style={{ fontSize: 16 }}>
-            TOTAL: <b>${totals?.total ?? 0}</b>
-          </div>
+          <div>Consumos: <b>${totals?.consumos ?? 0}</b></div>
+          <div>Arriendo: <b>${totals?.rental ?? 0}</b></div>
+          <div style={{ fontSize: 16 }}>TOTAL: <b>${totals?.total ?? 0}</b></div>
 
           {showLiveTime && (
             <div
@@ -353,7 +309,7 @@ export default function TicketPage() {
           )}
         </div>
 
-        {/* ✅ Acciones */}
+        {/* ✅ Acciones: COBRAR visible para todos */}
         <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
           {isManager && canMove && (
             <button onClick={openMove} disabled={loading} style={btnSecondary()}>
@@ -367,7 +323,6 @@ export default function TicketPage() {
             </button>
           )}
 
-          {/* ✅ SELLER TAMBIÉN VE COBRO */}
           <button onClick={() => checkout("CASH")} disabled={loading || !canCheckout} style={btn()}>
             Cobrar CASH
           </button>
@@ -378,7 +333,7 @@ export default function TicketPage() {
 
         {isSeller && (
           <div style={{ marginTop: 8, color: "#bdbdbd", fontSize: 12 }}>
-            * Modo vendedor: no puedes mover mesas ni cerrar manualmente. RENTAL se cierra solo al cobrar.
+            * Modo vendedor: puedes agregar consumos y cobrar. RENTAL se cierra solo al cobrar.
           </div>
         )}
       </div>
@@ -483,7 +438,7 @@ export default function TicketPage() {
           >
             <div style={{ fontWeight: 900, fontSize: 16 }}>Cambiar mesa</div>
             <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
-              Moverá consumos y tiempo tal cual. Solo muestra mesas libres del mismo tipo.
+              Solo muestra mesas libres del mismo tipo.
             </div>
 
             <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
@@ -494,7 +449,9 @@ export default function TicketPage() {
               ))}
             </div>
 
-            {freeTablesSameType.length === 0 && <div style={{ marginTop: 12, color: "#bdbdbd" }}>No hay mesas libres para mover.</div>}
+            {freeTablesSameType.length === 0 && (
+              <div style={{ marginTop: 12, color: "#bdbdbd" }}>No hay mesas libres para mover.</div>
+            )}
 
             <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button onClick={() => setMoveOpen(false)} disabled={loading} style={btnSecondary()}>
@@ -545,3 +502,4 @@ function btnSecondary(): React.CSSProperties {
     whiteSpace: "nowrap",
   };
 }
+
