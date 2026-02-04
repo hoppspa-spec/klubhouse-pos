@@ -6,8 +6,24 @@ import { api, API_URL } from "@/lib/api";
 
 type Role = "MASTER" | "SLAVE" | "SELLER";
 
-type Product = { id: string; name: string; category: string; price: number; stock: number; isActive: boolean };
-type TicketItem = { id: string; productId: string; qty: number; unitPrice: number; lineTotal: number; product: Product };
+type Product = {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  stock: number;
+  isActive: boolean;
+};
+
+type TicketItem = {
+  id: string;
+  productId: string;
+  qty: number;
+  unitPrice: number;
+  lineTotal: number;
+  product: Product;
+};
+
 type Ticket = {
   id: string;
   kind: "RENTAL" | "BAR";
@@ -36,7 +52,8 @@ function formatMinutes(min: number) {
 }
 
 export default function TicketPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ id: string }>();
+  const id = params?.id;
 
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [totals, setTotals] = useState<{ consumos: number; rental: number; total: number } | null>(null);
@@ -47,6 +64,7 @@ export default function TicketPage() {
 
   const [liveMinutes, setLiveMinutes] = useState<number | null>(null);
 
+  // mover mesa UI (V1: visible solo manager)
   const [moveOpen, setMoveOpen] = useState(false);
   const [tables, setTables] = useState<TableState[]>([]);
 
@@ -80,7 +98,9 @@ export default function TicketPage() {
   }, [tables, ticket]);
 
   async function load() {
+    if (!id) return;
     setErr(null);
+
     try {
       const [t, ps] = await Promise.all([
         api<{ ticket: Ticket; totals: { consumos: number; rental: number; total: number } }>(`/tickets/${id}`),
@@ -99,9 +119,9 @@ export default function TicketPage() {
         });
 
       setProducts(cleaned);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      setErr("No pude cargar ticket / productos. (¿token vencido?)");
+      setErr("No pude cargar ticket / productos.");
     }
   }
 
@@ -143,6 +163,7 @@ export default function TicketPage() {
     if (!ticket) return;
     setLoading(true);
     setErr(null);
+
     try {
       await api(`/tickets/${ticket.id}/items`, {
         method: "POST",
@@ -157,10 +178,12 @@ export default function TicketPage() {
     }
   }
 
+  // ✅ ahora SELLER también puede cerrar arriendo (si backend lo permite)
   async function closeRental() {
     if (!ticket) return;
     setLoading(true);
     setErr(null);
+
     try {
       await api(`/tickets/${ticket.id}/close`, { method: "POST" });
       await load();
@@ -180,17 +203,20 @@ export default function TicketPage() {
     setErr(null);
 
     try {
-      const res = await api<{ ok: boolean; receiptNumber: number; total: number; receiptToken: string }>(
-        `/tickets/${ticket.id}/checkout`,
-        { method: "POST", body: JSON.stringify({ method }) }
-      );
+      const res = await api<{
+        ok: boolean;
+        receiptNumber: number;
+        total: number;
+        receiptToken: string;
+      }>(`/tickets/${ticket.id}/checkout`, {
+        method: "POST",
+        body: JSON.stringify({ method }),
+      });
 
       const url = `${API_URL}/tickets/${ticket.id}/receipt?token=${encodeURIComponent(res.receiptToken)}`;
 
-      // 🧾 abrir voucher en ventana nueva
-      const w = window.open(url, "_blank", "noopener,noreferrer");
-      // fallback si el navegador bloquea popups
-      if (!w) window.location.assign(url);
+      // 🧾 voucher en nueva ventana
+      window.open(url, "_blank", "noopener,noreferrer");
 
       // 🏠 volver a mesas
       setTimeout(() => {
@@ -214,6 +240,7 @@ export default function TicketPage() {
     if (!ticket) return;
     setLoading(true);
     setErr(null);
+
     try {
       await api(`/tickets/${ticket.id}/move`, {
         method: "POST",
@@ -229,6 +256,14 @@ export default function TicketPage() {
     }
   }
 
+  if (!id) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>
+        <div style={{ fontWeight: 900 }}>Ticket inválido (sin ID)</div>
+      </div>
+    );
+  }
+
   if (!ticket) {
     return (
       <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>
@@ -238,12 +273,16 @@ export default function TicketPage() {
     );
   }
 
-  // ✅ Gates:
+  // ✅ Cobro:
+  // - BAR: cualquiera puede cobrar si OPEN/CHECKOUT
+  // - RENTAL: cualquiera puede cobrar si CHECKOUT
+  // - RENTAL: SELLER también puede cobrar si OPEN (si tu backend auto-cierra o si antes apretó "Cerrar arriendo")
   const canCheckout =
     (ticket.kind === "BAR" && (ticket.status === "OPEN" || ticket.status === "CHECKOUT")) ||
     (ticket.kind === "RENTAL" && (ticket.status === "CHECKOUT" || (isSeller && ticket.status === "OPEN")));
 
-  const canCloseRental = isManager && ticket.kind === "RENTAL" && ticket.status === "OPEN";
+  // ✅ Cerrar arriendo (si quieres full vendedor, déjalo true para seller)
+  const canCloseRental = ticket.kind === "RENTAL" && ticket.status === "OPEN"; // SELLER + MANAGER
   const canMove = isManager && (ticket.status === "OPEN" || ticket.status === "CHECKOUT");
   const showLiveTime = ticket.kind === "RENTAL" && liveMinutes != null;
 
@@ -284,12 +323,17 @@ export default function TicketPage() {
 
       {err && <div style={{ marginTop: 12, color: "#ff4d4d" }}>{err}</div>}
 
-      {/* Totals */}
       <div style={{ marginTop: 14, background: "#0d0d0d", border: "1px solid #222", borderRadius: 14, padding: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <div>Consumos: <b>${totals?.consumos ?? 0}</b></div>
-          <div>Arriendo: <b>${totals?.rental ?? 0}</b></div>
-          <div style={{ fontSize: 16 }}>TOTAL: <b>${totals?.total ?? 0}</b></div>
+          <div>
+            Consumos: <b>${totals?.consumos ?? 0}</b>
+          </div>
+          <div>
+            Arriendo: <b>${totals?.rental ?? 0}</b>
+          </div>
+          <div style={{ fontSize: 16 }}>
+            TOTAL: <b>${totals?.total ?? 0}</b>
+          </div>
 
           {showLiveTime && (
             <div
@@ -309,7 +353,7 @@ export default function TicketPage() {
           )}
         </div>
 
-        {/* ✅ Acciones: COBRAR visible para todos */}
+        {/* ✅ Acciones: CASH/DEBIT para TODOS */}
         <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
           {isManager && canMove && (
             <button onClick={openMove} disabled={loading} style={btnSecondary()}>
@@ -317,9 +361,9 @@ export default function TicketPage() {
             </button>
           )}
 
-          {isManager && canCloseRental && (
+          {canCloseRental && (
             <button onClick={closeRental} disabled={loading} style={btnSecondary()}>
-              Cerrar arriendo (calcular tiempo)
+              Cerrar arriendo
             </button>
           )}
 
@@ -333,7 +377,7 @@ export default function TicketPage() {
 
         {isSeller && (
           <div style={{ marginTop: 8, color: "#bdbdbd", fontSize: 12 }}>
-            * Modo vendedor: puedes agregar consumos y cobrar. RENTAL se cierra solo al cobrar.
+            * Modo vendedor: puedes agregar consumos, cerrar arriendo y cobrar.
           </div>
         )}
       </div>
@@ -412,7 +456,7 @@ export default function TicketPage() {
         {filtered.length === 0 && <div style={{ marginTop: 10, color: "#bdbdbd" }}>No hay productos que coincidan.</div>}
       </div>
 
-      {/* Modal mover mesa */}
+      {/* Modal mover mesa (solo manager) */}
       {moveOpen && isManager && (
         <div
           onClick={() => setMoveOpen(false)}
@@ -437,9 +481,7 @@ export default function TicketPage() {
             }}
           >
             <div style={{ fontWeight: 900, fontSize: 16 }}>Cambiar mesa</div>
-            <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
-              Solo muestra mesas libres del mismo tipo.
-            </div>
+            <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>Solo muestra mesas libres del mismo tipo.</div>
 
             <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
               {freeTablesSameType.map((t) => (
@@ -449,9 +491,7 @@ export default function TicketPage() {
               ))}
             </div>
 
-            {freeTablesSameType.length === 0 && (
-              <div style={{ marginTop: 12, color: "#bdbdbd" }}>No hay mesas libres para mover.</div>
-            )}
+            {freeTablesSameType.length === 0 && <div style={{ marginTop: 12, color: "#bdbdbd" }}>No hay mesas libres.</div>}
 
             <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button onClick={() => setMoveOpen(false)} disabled={loading} style={btnSecondary()}>

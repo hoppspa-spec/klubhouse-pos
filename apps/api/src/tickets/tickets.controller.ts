@@ -29,21 +29,20 @@ export class TicketsController {
     return this.svc.addItem(id, body.productId, body.qtyDelta);
   }
 
-  // ✅ V1: SELLER también puede cerrar arriendo (si quieres que llame al manager, quita SELLER aquí)
+  // ✅ SELLER también puede cerrar arriendo (si quieres)
   @Post("tickets/:id/close")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
-  close(@Req() req: any, @Param("id") id: string) {
-    return this.svc.closeRental(id, req.user.role as Role);
+  close(@Param("id") id: string) {
+    return this.svc.closeRental(id);
   }
 
-  // ✅ SELLER SÍ puede cobrar
   @Post("tickets/:id/checkout")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
   checkout(@Req() req: any, @Param("id") id: string, @Body() body: { method: "CASH" | "DEBIT" }) {
     return this.svc.checkout(id, req.user.sub, body.method, req.user.role as Role);
   }
 
-  // ❌ mover mesa SOLO manager/dueño
+  // ❌ mover mesa: solo manager/admin
   @Post("tickets/:id/move")
   @Roles(Role.MASTER, Role.SLAVE)
   move(@Param("id") id: string, @Body() body: { toTableId: number }) {
@@ -57,7 +56,6 @@ export class TicketsController {
   }
 }
 
-// ✅ Público (voucher, sin guards)
 @Controller()
 export class TicketsPublicController {
   constructor(private svc: TicketsService) {}
