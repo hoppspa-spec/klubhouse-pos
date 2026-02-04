@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, API_URL } from "@/lib/api";
 
@@ -78,8 +78,19 @@ export default function TicketPage() {
     }
   }, []);
 
-  const role: Role | undefined = user?.role;
-  const displayName: string | undefined = user?.name || user?.username;
+  // ✅ fallback: por si el memo corre antes de que localStorage se setee (raro, pero pasa)
+  const [userLive, setUserLive] = useState<any>(user);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      setUserLive(JSON.parse(localStorage.getItem("user") || "null"));
+    } catch {
+      setUserLive(null);
+    }
+  }, []);
+
+  const role: Role | undefined = (userLive?.role || user?.role) as Role | undefined;
+  const displayName: string | undefined = userLive?.name || userLive?.username || user?.name || user?.username;
 
   const isManager = role === "MASTER" || role === "SLAVE";
   const isSeller = role === "SELLER";
@@ -219,7 +230,7 @@ export default function TicketPage() {
       // 🏠 volver al home POS
       setTimeout(() => {
         window.location.href = "/tables";
-      }, 300);
+      }, 250);
     } catch (e: any) {
       console.error(e);
       setErr(e?.message || "No pude cobrar.");
@@ -268,8 +279,7 @@ export default function TicketPage() {
   // - RENTAL: SELLER puede cobrar si OPEN (auto-cierra en backend) o CHECKOUT
   const canCheckout =
     (ticket.kind === "BAR" && (ticket.status === "OPEN" || ticket.status === "CHECKOUT")) ||
-    (ticket.kind === "RENTAL" &&
-      (ticket.status === "CHECKOUT" || (isSeller && ticket.status === "OPEN")));
+    (ticket.kind === "RENTAL" && (ticket.status === "CHECKOUT" || (isSeller && ticket.status === "OPEN")));
 
   const canCloseRental = isManager && ticket.kind === "RENTAL" && ticket.status === "OPEN";
   const canMove = isManager && (ticket.status === "OPEN" || ticket.status === "CHECKOUT");
@@ -357,6 +367,7 @@ export default function TicketPage() {
             </button>
           )}
 
+          {/* ✅ SELLER TAMBIÉN VE COBRO */}
           <button onClick={() => checkout("CASH")} disabled={loading || !canCheckout} style={btn()}>
             Cobrar CASH
           </button>
@@ -483,9 +494,7 @@ export default function TicketPage() {
               ))}
             </div>
 
-            {freeTablesSameType.length === 0 && (
-              <div style={{ marginTop: 12, color: "#bdbdbd" }}>No hay mesas libres para mover.</div>
-            )}
+            {freeTablesSameType.length === 0 && <div style={{ marginTop: 12, color: "#bdbdbd" }}>No hay mesas libres para mover.</div>}
 
             <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button onClick={() => setMoveOpen(false)} disabled={loading} style={btnSecondary()}>
