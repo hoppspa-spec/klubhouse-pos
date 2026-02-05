@@ -51,40 +51,26 @@ export class ProductsService {
 
   async update(
     id: string,
-    body: Partial<{ name: string; category: string; price: number; stockCritical: number }>
-  ) {
-    const existing = await this.prisma.product.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException("Producto no existe");
-
-    const data: any = {};
-
-    if (body.name != null) {
-      const v = body.name.trim();
-      if (!v) throw new BadRequestException("Nombre inválido");
-      data.name = v;
-    }
-    if (body.category != null) {
-      const v = body.category.trim();
-      if (!v) throw new BadRequestException("Categoría inválida");
-      data.category = v;
-    }
-    if (body.price != null) {
-      const v = Number(body.price);
-      if (!Number.isFinite(v) || v < 0) throw new BadRequestException("Precio inválido");
-      data.price = Math.round(v);
-    }
-    if (body.stockCritical != null) {
-      const v = Number(body.stockCritical);
-      if (!Number.isFinite(v) || v < 0) throw new BadRequestException("Stock crítico inválido");
-      data.stockCritical = Math.round(v);
-    }
-
-    try {
-      return await this.prisma.product.update({ where: { id }, data });
-    } catch {
-      throw new BadRequestException("No pude actualizar (¿nombre duplicado?)");
-    }
-  }
+    data: {
+      name?: string;
+      category?: string;
+      price?: number;
+      stock?: number;
+      isActive?: boolean;
+  
+   }
+ ) { 
+   return this.prisma.product.update({
+    where: { id },
+    data: {
+      ...(data.name !== undefined && { name: data.name }),
+      ...(data.category !== undefined && { category: data.category }),
+      ...(data.price !== undefined && { price: data.price }),
+      ...(data.stock !== undefined && { stock: data.stock }),
+      ...(data.isActive !== undefined && { isActive: data.isActive }),
+    },
+  });
+}
 
   async setActive(id: string, isActive: boolean) {
     const existing = await this.prisma.product.findUnique({ where: { id } });

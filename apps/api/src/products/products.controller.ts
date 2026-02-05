@@ -40,10 +40,11 @@ export class ProductsController {
     @Param("id") id: string,
     @Body()
     body: Partial<{
-      name: string;
-      category: string;
-      price: number;
-      stockCritical: number;
+      name?: string;
+      category?: string;
+      price?: number;
+      stock?: number;
+      isActive?: boolean;
     }>
   ) {
     return this.svc.update(id, body);
