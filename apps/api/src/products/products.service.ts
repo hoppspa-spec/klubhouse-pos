@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
@@ -11,42 +12,38 @@ export class ProductsService {
     });
   }
 
-  async create(body: {
+  async create(data: {
     name: string;
     category: string;
     price: number;
-    stock?: number;
-    stockCritical?: number;
+    stock: number;
+    stockCritical: number;
   }) {
-    const name = (body.name || "").trim();
-    const category = (body.category || "").trim();
-    const price = Number(body.price);
+    const name = (data.name || "").trim();
+    const category = (data.category || "").trim();
 
     if (!name) throw new BadRequestException("Nombre requerido");
     if (!category) throw new BadRequestException("Categoría requerida");
+
+    // normaliza números
+    const price = Number(data.price);
+    const stock = Number(data.stock);
+    const stockCritical = Number(data.stockCritical);
+
     if (!Number.isFinite(price) || price < 0) throw new BadRequestException("Precio inválido");
-
-    const stock = body.stock != null ? Number(body.stock) : 0;
-    const stockCritical = body.stockCritical != null ? Number(body.stockCritical) : 0;
-
     if (!Number.isFinite(stock) || stock < 0) throw new BadRequestException("Stock inválido");
     if (!Number.isFinite(stockCritical) || stockCritical < 0) throw new BadRequestException("Stock crítico inválido");
 
-    try {
-      return await this.prisma.product.create({
-        data: {
-          name,
-          category,
-          price: Math.round(price),
-          stock: Math.round(stock),
-          stockCritical: Math.round(stockCritical),
-          isActive: true,
-        },
-      });
-    } catch (e: any) {
-      // nombre unique
-      throw new BadRequestException("No pude crear producto (¿nombre duplicado?)");
-    }
+    return this.prisma.product.create({
+      data: {
+        name,
+        category,
+        price: Math.round(price),
+        stock: Math.round(stock),
+        stockCritical: Math.round(stockCritical),
+        isActive: true,
+      },
+    });
   }
 
   async update(
@@ -56,47 +53,52 @@ export class ProductsService {
       category?: string;
       price?: number;
       stock?: number;
+      stockCritical?: number;
       isActive?: boolean;
-  
-   }
- ) { 
-   return this.prisma.product.update({
-    where: { id },
-    data: {
-      ...(data.name !== undefined && { name: data.name }),
-      ...(data.category !== undefined && { category: data.category }),
-      ...(data.price !== undefined && { price: data.price }),
-      ...(data.stock !== undefined && { stock: data.stock }),
-      ...(data.isActive !== undefined && { isActive: data.isActive }),
-    },
-  });
-}
+    }
+  ) {
+    const exists = await this.prisma.product.findUnique({ where: { id } });
+    if (!exists) throw new NotFoundException("Producto no existe");
 
-  async setActive(id: string, isActive: boolean) {
-    const existing = await this.prisma.product.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException("Producto no existe");
+    const patch: Prisma.ProductUpdateInput = {};
+
+    if (data.name !== undefined) {
+      const v = String(data.name).trim();
+      if (!v) throw new BadRequestException("Nombre inválido");
+      patch.name = v;
+    }
+
+    if (data.category !== undefined) {
+      const v = String(data.category).trim();
+      if (!v) throw new BadRequestException("Categoría inválida");
+      patch.category = v;
+    }
+
+    if (data.price !== undefined) {
+      const v = Number(data.price);
+      if (!Number.isFinite(v) || v < 0) throw new BadRequestException("Precio inválido");
+      patch.price = Math.round(v);
+    }
+
+    if (data.stock !== undefined) {
+      const v = Number(data.stock);
+      if (!Number.isFinite(v) || v < 0) throw new BadRequestException("Stock inválido");
+      patch.stock = Math.round(v);
+    }
+
+    if (data.stockCritical !== undefined) {
+      const v = Number(data.stockCritical);
+      if (!Number.isFinite(v) || v < 0) throw new BadRequestException("Stock crítico inválido");
+      patch.stockCritical = Math.round(v);
+    }
+
+    if (data.isActive !== undefined) {
+      patch.isActive = Boolean(data.isActive);
+    }
 
     return this.prisma.product.update({
       where: { id },
-      data: { isActive: !!isActive },
-    });
-  }
-
-  async adjustStock(id: string, delta: number, reason?: string) {
-    const d = Number(delta);
-    if (!Number.isFinite(d) || d === 0) throw new BadRequestException("Delta inválido");
-
-    const p = await this.prisma.product.findUnique({ where: { id } });
-    if (!p) throw new NotFoundException("Producto no existe");
-
-    const newStock = p.stock + Math.round(d);
-    if (newStock < 0) throw new BadRequestException("Stock no puede quedar negativo");
-
-    // MVP: solo ajusta stock (después lo conectamos a StockMovement + createdById)
-    return this.prisma.product.update({
-      where: { id },
-      data: { stock: newStock },
+      data: patch,
     });
   }
 }
-
