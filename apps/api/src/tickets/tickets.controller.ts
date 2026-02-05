@@ -29,24 +29,21 @@ export class TicketsController {
     return this.svc.addItem(id, body.productId, body.qtyDelta);
   }
 
-  // ✅ SELLER también puede cerrar arriendo (si quieres)
+  // ✅ SOLO MANAGER/ADMIN puede cerrar arriendo manualmente
   @Post("tickets/:id/close")
-  @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
-  close(@Param("id") id: string) {
-    return this.svc.closeRental(id);
+  @Roles(Role.MASTER, Role.SLAVE)
+  close(@Req() req: any, @Param("id") id: string) {
+    return this.svc.closeRental(id, req.user.role as Role);
   }
 
   @Post("tickets/:id/checkout")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
-  checkout(@Req() req: any, @Param("id") id: string, @Body() body: { method: "CASH" | "DEBIT" }) {
+  checkout(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: { method: "CASH" | "DEBIT" }
+  ) {
     return this.svc.checkout(id, req.user.sub, body.method, req.user.role as Role);
-  }
-
-  // ❌ mover mesa: solo manager/admin
-  @Post("tickets/:id/move")
-  @Roles(Role.MASTER, Role.SLAVE)
-  move(@Param("id") id: string, @Body() body: { toTableId: number }) {
-    return this.svc.moveTicket(id, body.toTableId);
   }
 
   @Get("tickets/:id")
@@ -67,4 +64,3 @@ export class TicketsPublicController {
     return res.send(html);
   }
 }
-
