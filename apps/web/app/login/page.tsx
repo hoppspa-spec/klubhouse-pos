@@ -1,220 +1,94 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { api, API_URL } from "@/lib/api";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { login } from "@/lib/auth";
 
-type Role = "MASTER" | "SLAVE" | "SELLER";
-
-type Product = {
-  id: string;
-  name: string;
-  category: string;
-  price: number;
-  stock: number;
-  isActive: boolean;
-};
-
-type TicketItem = {
-  id: string;
-  productId: string;
-  qty: number;
-  unitPrice: number;
-  lineTotal: number;
-  product: Product;
-};
-
-type Ticket = {
-  id: string;
-  kind: "RENTAL" | "BAR";
-  status: "OPEN" | "CHECKOUT" | "PAID" | "CANCELED";
-  table: { id: number; name: string; type: "POOL" | "BAR" };
-  items: TicketItem[];
-  startedAt?: string | null;
-  minutesPlayed?: number | null;
-  rentalAmount?: number | null;
-};
-
-type TableState = {
-  id: number;
-  name: string;
-  type: "POOL" | "BAR";
-  ticket: any | null;
-};
-
-function diffMinutes(from: string, to: Date) {
-  return Math.max(0, Math.floor((to.getTime() - new Date(from).getTime()) / 60000));
-}
-
-function formatMinutes(min: number) {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m} min`;
-}
-
-export default function TicketPage() {
-  const { id } = useParams<{ id: string }>();
-  const router = useRouter();
-
-  const [ticket, setTicket] = useState<Ticket | null>(null);
-  const [totals, setTotals] = useState<{ consumos: number; rental: number; total: number } | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [q, setQ] = useState("");
+export default function LoginPage() {
+  const r = useRouter();
+  const [username, setU] = useState("");
+  const [password, setP] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [liveMinutes, setLiveMinutes] = useState<number | null>(null);
 
-  // 👇 USER REAL (FIX)
-  const [user, setUser] = useState<{ role: Role; name?: string; username?: string } | null>(null);
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (loading) return;
 
-  // mover mesa (V1 visible solo manager)
-  const [moveOpen, setMoveOpen] = useState(false);
-  const [tables, setTables] = useState<TableState[]>([]);
-
-  // ✅ CARGAR USER DESDE LOCALSTORAGE (CORRECTO)
-  useEffect(() => {
-    try {
-      const u = localStorage.getItem("user");
-      if (u) setUser(JSON.parse(u));
-    } catch {}
-  }, []);
-
-  const role = user?.role;
-  const isManager = role === "MASTER" || role === "SLAVE";
-  const isSeller = role === "SELLER";
-
-  const filtered = useMemo(() => {
-    const s = q.toLowerCase().trim();
-    if (!s) return products;
-    return products.filter((p) =>
-      `${p.name} ${p.category}`.toLowerCase().includes(s)
-    );
-  }, [products, q]);
-
-  async function load() {
-    try {
-      const [t, ps] = await Promise.all([
-        api<{ ticket: Ticket; totals: any }>(`/tickets/${id}`),
-        api<Product[]>("/products"),
-      ]);
-
-      setTicket(t.ticket);
-      setTotals(t.totals);
-      setProducts(ps.filter((p) => p.isActive));
-    } catch {
-      setErr("No pude cargar ticket");
-    }
-  }
-
-  useEffect(() => {
-    load();
-    const i = setInterval(load, 2000);
-    return () => clearInterval(i);
-  }, [id]);
-
-  // ⏱️ tiempo vivo
-  useEffect(() => {
-    if (!ticket) return;
-
-    if (ticket.kind === "RENTAL" && ticket.status === "OPEN" && ticket.startedAt) {
-      const tick = () => setLiveMinutes(diffMinutes(ticket.startedAt!, new Date()));
-      tick();
-      const i = setInterval(tick, 1000);
-      return () => clearInterval(i);
-    }
-
-    if (ticket.minutesPlayed != null) {
-      setLiveMinutes(ticket.minutesPlayed);
-    }
-  }, [ticket]);
-
-  async function add(productId: string, qtyDelta: number) {
-    if (!ticket) return;
-    setLoading(true);
-    await api(`/tickets/${ticket.id}/items`, {
-      method: "POST",
-      body: JSON.stringify({ productId, qtyDelta }),
-    });
-    await load();
-    setLoading(false);
-  }
-
-  async function checkout(method: "CASH" | "DEBIT") {
-    if (!ticket) return;
+    setErr(null);
     setLoading(true);
 
-    const res = await api<any>(`/tickets/${ticket.id}/checkout`, {
-      method: "POST",
-      body: JSON.stringify({ method }),
-    });
+    try {
+      const out = await login(username, password);
 
-    const url = `${API_URL}/tickets/${ticket.id}/receipt?token=${encodeURIComponent(res.receiptToken)}`;
+      const token = out?.accessToken ?? out?.access_token;
+      if (!token) throw new Error("Token inválido");
 
-    // 🧾 voucher en nueva ventana
-    window.open(url, "_blank", "noopener,noreferrer");
+      localStorage.setItem("accessToken", token);
+      if (out?.user) localStorage.setItem("user", JSON.stringify(out.user));
 
-    // 🏠 volver a mesas
-    setTimeout(() => router.replace("/tables"), 300);
+      r.replace("/tables");
+    } catch (e) {
+      console.error(e);
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("user");
+      setErr("Usuario o clave incorrecta.");
+    } finally {
+      setLoading(false);
+    }
   }
-
-  if (!ticket || !user) {
-    return <div style={{ color: "#fff", padding: 20 }}>Cargando…</div>;
-  }
-
-  // ✅ GATES CORRECTOS
-  const canCheckout =
-    ticket.status !== "PAID" &&
-    (
-      (ticket.kind === "BAR" && (ticket.status === "OPEN" || ticket.status === "CHECKOUT")) ||
-      (ticket.kind === "RENTAL" &&
-        (ticket.status === "CHECKOUT" || isSeller))
-    );
 
   return (
-    <div style={{ background: "#060606", color: "#fff", minHeight: "100vh", padding: 20 }}>
-      <h2>{ticket.table.name} · {ticket.kind} · {ticket.status}</h2>
+    <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", display: "grid", placeItems: "center", padding: 20 }}>
+      <form onSubmit={onSubmit} style={{ width: "min(420px, 100%)", background: "#0d0d0d", border: "2px solid #f5c400", borderRadius: 18, padding: 18 }}>
+        <div style={{ fontWeight: 900, fontSize: 18 }}>KLUB HOUSE · POS</div>
+        <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>Ingreso de usuario</div>
 
-      {liveMinutes != null && ticket.kind === "RENTAL" && (
-        <div style={{ color: "#f5c400" }}>
-          ⏱ {formatMinutes(liveMinutes)}
+        <div style={{ marginTop: 14 }}>
+          <label style={{ fontSize: 12, color: "#bdbdbd" }}>Usuario</label>
+          <input value={username} onChange={(e) => setU(e.target.value)} style={inp()} autoComplete="username" />
         </div>
-      )}
 
-      <div style={{ marginTop: 12 }}>
-        TOTAL: <b>${totals?.total ?? 0}</b>
-      </div>
+        <div style={{ marginTop: 10 }}>
+          <label style={{ fontSize: 12, color: "#bdbdbd" }}>Clave</label>
+          <input type="password" value={password} onChange={(e) => setP(e.target.value)} style={inp()} autoComplete="current-password" />
+        </div>
 
-      <div style={{ marginTop: 14, display: "flex", gap: 10 }}>
-        <button disabled={!canCheckout || loading} onClick={() => checkout("CASH")} style={btn()}>
-          Cobrar CASH
+        {err && <div style={{ marginTop: 10, color: "#ff4d4d", fontSize: 13 }}>{err}</div>}
+
+        <button type="submit" disabled={loading} style={btn()}>
+          {loading ? "Entrando..." : "Entrar"}
         </button>
-        <button disabled={!canCheckout || loading} onClick={() => checkout("DEBIT")} style={btn()}>
-          Cobrar DEBIT
-        </button>
-      </div>
-
-      <div style={{ marginTop: 18 }}>
-        {ticket.items.map((it) => (
-          <div key={it.id}>
-            {it.product.name} · {it.qty}
-            <button onClick={() => add(it.productId, +1)}>+</button>
-            <button onClick={() => add(it.productId, -1)}>-</button>
-          </div>
-        ))}
-      </div>
+      </form>
     </div>
   );
 }
 
+function inp(): React.CSSProperties {
+  return {
+    width: "100%",
+    marginTop: 6,
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: "1px solid #333",
+    background: "#111",
+    color: "#fff",
+    outline: "none",
+  };
+}
+
 function btn(): React.CSSProperties {
   return {
-    padding: "10px 14px",
-    borderRadius: 12,
+    width: "100%",
+    marginTop: 14,
+    padding: "12px 14px",
+    borderRadius: 14,
+    border: "none",
     background: "#f5c400",
     color: "#000",
     fontWeight: 900,
-    border: "none",
     cursor: "pointer",
+    opacity: 1,
   };
 }
 
