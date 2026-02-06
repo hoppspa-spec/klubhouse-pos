@@ -13,17 +13,29 @@ type TableState = {
   ticket: any | null;
 };
 
+type SessionUser = {
+  role: Role;
+  name?: string;
+  username?: string;
+};
+
 export default function TablesPage() {
   const r = useRouter();
 
   const [tables, setTables] = useState<TableState[]>([]);
   const [err, setErr] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(null);
 
-  // ✅ cargar user una sola vez (sin romper SSR)
+  // ✅ user en 3 estados:
+  // undefined = cargando localStorage
+  // null = no hay sesión
+  // object = sesión OK
+  const [user, setUser] = useState<SessionUser | null | undefined>(undefined);
+
+  // ✅ cargar user una sola vez
   useEffect(() => {
     try {
-      setUser(JSON.parse(localStorage.getItem("user") || "null"));
+      const raw = localStorage.getItem("user");
+      setUser(raw ? (JSON.parse(raw) as SessionUser) : null);
     } catch {
       setUser(null);
     }
@@ -48,11 +60,15 @@ export default function TablesPage() {
     }
   }
 
+  // ✅ refrescar SOLO cuando ya cargó user (y hay sesión)
   useEffect(() => {
+    if (user === undefined) return; // todavía cargando
+    if (user === null) return; // sin sesión (api() igual te mandará a /login si intenta)
     refresh();
     const t = setInterval(refresh, 2000);
     return () => clearInterval(t);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   async function goTable(t: TableState) {
     try {
@@ -89,6 +105,15 @@ export default function TablesPage() {
     r.replace("/login");
   }
 
+  // ✅ GUARD BEFORE RETURN (esto es lo que te faltaba)
+  if (user === undefined) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>
+        Cargando sesión…
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>
       {/* Header */}
@@ -104,14 +129,12 @@ export default function TablesPage() {
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          {/* ✅ 0) BOTÓN REPORTES (solo MASTER/SLAVE) */}
           {canReports && (
             <a href="/reports" style={linkBtn()}>
               Reportes
             </a>
           )}
 
-          {/* ✅ 0b) BOTÓN CAJA (solo SELLER) */}
           {canCashout && (
             <a href="/cashout" style={linkBtn()}>
               Caja (mi turno)
@@ -138,35 +161,40 @@ export default function TablesPage() {
 
       {err && <div style={{ marginTop: 10, color: "#ff4d4d" }}>{err}</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginTop: 16 }}>
-        {tables.map((t) => {
-          const busy = !!t.ticket;
-          const border = busy ? "#d6aa00" : "#f5c400";
-          const bg = busy ? "#1a1400" : "#0f0f0f";
+      {/* Si no hay mesas, lo mostramos explícito */}
+      {tables.length === 0 ? (
+        <div style={{ marginTop: 16, color: "#bdbdbd" }}>No hay mesas para mostrar (o aún cargando).</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginTop: 16 }}>
+          {tables.map((t) => {
+            const busy = !!t.ticket;
+            const border = busy ? "#d6aa00" : "#f5c400";
+            const bg = busy ? "#1a1400" : "#0f0f0f";
 
-          return (
-            <div
-              key={t.id}
-              style={{
-                background: bg,
-                border: `2px solid ${border}`,
-                borderRadius: 18,
-                padding: 14,
-                minHeight: 110,
-              }}
-            >
-              <div style={{ fontWeight: 900, fontSize: 16 }}>{t.name}</div>
-              <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
-                {busy ? `Activo: ${t.ticket.kind} · ${t.ticket.status}` : "Libre"}
+            return (
+              <div
+                key={t.id}
+                style={{
+                  background: bg,
+                  border: `2px solid ${border}`,
+                  borderRadius: 18,
+                  padding: 14,
+                  minHeight: 110,
+                }}
+              >
+                <div style={{ fontWeight: 900, fontSize: 16 }}>{t.name}</div>
+                <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
+                  {busy ? `Activo: ${t.ticket.kind} · ${t.ticket.status}` : "Libre"}
+                </div>
+
+                <button onClick={() => goTable(t)} style={btnPrimaryWide()}>
+                  {busy ? "Entrar" : t.type === "BAR" ? "Abrir ticket barra" : "Iniciar arriendo"}
+                </button>
               </div>
-
-              <button onClick={() => goTable(t)} style={btnPrimaryWide()}>
-                {busy ? "Entrar" : t.type === "BAR" ? "Abrir ticket barra" : "Iniciar arriendo"}
-              </button>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
