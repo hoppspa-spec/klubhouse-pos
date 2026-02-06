@@ -1,215 +1,205 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
-type GroupBy = "day" | "week" | "month";
+type Role = "MASTER" | "SLAVE" | "SELLER";
+type Range = "DAY" | "WEEK" | "MONTH";
 
-type SalesReport = {
-  range: { from: string; to: string; groupBy: GroupBy };
-  totals: { orders: number; gross: number };
-  timeline: Array<{ bucket: string; orders: number; gross: number; cash: number; debit: number }>;
-  topProducts: Array<{ productId: string; name: string; category: string; qty: number; gross: number }>;
+type ReportsSummary = {
+  range: Range;
+  from: string;
+  to: string;
+
+  rentalsCount: number;
+  rentalsMinutes: number;
+  rentalsAmount: number;
+
+  productsAmount: number;
+  topProducts: { name: string; qty: number; amount: number }[];
 };
 
-function isoDaysAgo(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString();
-}
-
-function fmtCLP(n: number) {
-  try {
-    return new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(n);
-  } catch {
-    return `$${n}`;
-  }
-}
-
-function fmtDate(s: string) {
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return s;
-  return d.toLocaleString("es-CL");
-}
-
 export default function ReportsPage() {
-  const [groupBy, setGroupBy] = useState<GroupBy>("day");
-  const [days, setDays] = useState<number>(30);
+  const r = useRouter();
 
-  const [data, setData] = useState<SalesReport | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [user, setUser] = useState<{ role: Role; name?: string; username?: string } | null>(null);
+  const role = user?.role;
+
+  const isManager = role === "MASTER" || role === "SLAVE";
+
+  const [range, setRange] = useState<Range>("DAY");
+  const [data, setData] = useState<ReportsSummary | null>(null);
   const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
-  const from = useMemo(() => isoDaysAgo(days), [days]);
-  const to = useMemo(() => new Date().toISOString(), []);
+  useEffect(() => {
+    try {
+      const u = localStorage.getItem("user");
+      setUser(u ? JSON.parse(u) : null);
+    } catch {
+      setUser(null);
+    }
+  }, []);
 
   async function load() {
     setErr(null);
     setLoading(true);
     try {
-      const q = new URLSearchParams({
-        from,
-        to,
-        groupBy,
-      }).toString();
-
-      const out = await api<SalesReport>(`/reports/sales?${q}`);
+      // si no tienes este endpoint aún, igual compila y verás error bonito
+      const out = await api<ReportsSummary>(`/reports/summary?range=${range}`);
       setData(out);
     } catch (e: any) {
       console.error(e);
-      setErr(e?.message || "No pude cargar reporte");
+      setData(null);
+      setErr(e?.message || "No pude cargar reportes.");
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
+    if (!user) return;
+    if (!isManager) return; // seller no entra
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupBy, days]);
+  }, [user, range]);
+
+  if (!user) {
+    return <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>Cargando…</div>;
+  }
+
+  if (!isManager) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>
+        <div style={{ fontWeight: 900, fontSize: 18 }}>Control & Estadísticas</div>
+        <div style={{ marginTop: 8, color: "#bdbdbd" }}>
+          Este módulo es solo para <b>ADMIN/MANAGER</b>.
+        </div>
+        <button onClick={() => r.replace("/tables")} style={btnSecondary()}>
+          ← Volver
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontWeight: 900, fontSize: 22 }}>Control de ventas</div>
+          <div style={{ fontWeight: 900, fontSize: 22 }}>📊 Control & Estadísticas</div>
           <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
-            Rango: últimos {days} días · Agrupación: {groupBy}
+            {user?.name || user?.username || "Usuario"} · <b>{role}</b>
           </div>
         </div>
 
-        <a href="/tables" style={{ color: "#f5c400", fontWeight: 900, textDecoration: "none" }}>
-          ← Mesas
-        </a>
-      </div>
-
-      {err && <div style={{ marginTop: 12, color: "#ff4d4d" }}>{err}</div>}
-
-      {/* Controls */}
-      <div style={{ marginTop: 16, background: "#0d0d0d", border: "1px solid #222", borderRadius: 16, padding: 14 }}>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ fontWeight: 900 }}>Agrupar</div>
-          <button onClick={() => setGroupBy("day")} disabled={loading} style={groupBy === "day" ? btn() : btnSecondary()}>
-            Diario
-          </button>
-          <button onClick={() => setGroupBy("week")} disabled={loading} style={groupBy === "week" ? btn() : btnSecondary()}>
-            Semanal
-          </button>
-          <button onClick={() => setGroupBy("month")} disabled={loading} style={groupBy === "month" ? btn() : btnSecondary()}>
-            Mensual
-          </button>
-
-          <div style={{ width: 12 }} />
-
-          <div style={{ fontWeight: 900 }}>Rango</div>
-          <button onClick={() => setDays(7)} disabled={loading} style={days === 7 ? btn() : btnSecondary()}>
-            7 días
-          </button>
-          <button onClick={() => setDays(30)} disabled={loading} style={days === 30 ? btn() : btnSecondary()}>
-            30 días
-          </button>
-          <button onClick={() => setDays(90)} disabled={loading} style={days === 90 ? btn() : btnSecondary()}>
-            90 días
-          </button>
-
-          <button onClick={load} disabled={loading} style={{ ...btnSecondary(), marginLeft: "auto" }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <a href="/tables" style={linkPill()}>
+            ← Mesas
+          </a>
+          <button onClick={load} disabled={loading} style={btnSecondary()}>
             Refrescar
           </button>
         </div>
       </div>
 
-      {/* Summary */}
-      <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
-        <Card title="Ventas (tickets pagados)" value={data ? String(data.totals.orders) : "—"} />
-        <Card title="Total bruto" value={data ? fmtCLP(data.totals.gross) : "—"} />
-        <Card
-          title="Promedio por venta"
-          value={data && data.totals.orders > 0 ? fmtCLP(Math.round(data.totals.gross / data.totals.orders)) : "—"}
-        />
+      {err && <div style={{ marginTop: 12, color: "#ff4d4d" }}>{err}</div>}
+
+      <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button onClick={() => setRange("DAY")} disabled={loading} style={range === "DAY" ? btn() : btnSecondary()}>
+          Diario
+        </button>
+        <button onClick={() => setRange("WEEK")} disabled={loading} style={range === "WEEK" ? btn() : btnSecondary()}>
+          Semanal
+        </button>
+        <button onClick={() => setRange("MONTH")} disabled={loading} style={range === "MONTH" ? btn() : btnSecondary()}>
+          Mensual
+        </button>
       </div>
 
-      {/* Timeline */}
-      <div style={{ marginTop: 16, background: "#0d0d0d", border: "1px solid #222", borderRadius: 16, padding: 14 }}>
-        <div style={{ fontWeight: 900 }}>Timeline</div>
-        <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
-          {data ? `${fmtDate(data.range.from)} → ${fmtDate(data.range.to)}` : "—"}
+      {/* Cards */}
+      <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
+        <div style={card()}>
+          <div style={cardTitle()}>Arriendos</div>
+          <div style={cardBig()}>{data?.rentalsCount ?? "—"}</div>
+          <div style={cardMeta()}>Cantidad</div>
         </div>
 
-        <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-          {(data?.timeline ?? []).map((r) => (
-            <div
-              key={r.bucket}
-              style={{
-                border: "1px solid #222",
-                borderRadius: 12,
-                padding: 12,
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                alignItems: "center",
-              }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 900 }}>{fmtDate(r.bucket)}</div>
-                <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>
-                  Ventas: <b>{r.orders}</b> · CASH: <b>{fmtCLP(r.cash)}</b> · DEBIT: <b>{fmtCLP(r.debit)}</b>
+        <div style={card()}>
+          <div style={cardTitle()}>Minutos</div>
+          <div style={cardBig()}>{data?.rentalsMinutes ?? "—"}</div>
+          <div style={cardMeta()}>Tiempo total</div>
+        </div>
+
+        <div style={card()}>
+          <div style={cardTitle()}>$ Arriendos</div>
+          <div style={cardBig()}>${data?.rentalsAmount ?? "—"}</div>
+          <div style={cardMeta()}>Total arriendo</div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+        <div style={card()}>
+          <div style={cardTitle()}>$ Productos</div>
+          <div style={cardBig()}>${data?.productsAmount ?? "—"}</div>
+          <div style={cardMeta()}>Total ventas productos</div>
+        </div>
+
+        <div style={card()}>
+          <div style={cardTitle()}>Top productos</div>
+          <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+            {(data?.topProducts || []).slice(0, 8).map((p, idx) => (
+              <div key={idx} style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <b>{p.name}</b>
+                </div>
+                <div style={{ color: "#bdbdbd" }}>
+                  {p.qty}u · <b>${p.amount}</b>
                 </div>
               </div>
-              <div style={{ fontWeight: 900, fontSize: 16 }}>{fmtCLP(r.gross)}</div>
-            </div>
-          ))}
-
-          {(data?.timeline?.length ?? 0) === 0 && <div style={{ color: "#bdbdbd" }}>Sin ventas en el rango.</div>}
+            ))}
+            {(data?.topProducts || []).length === 0 && <div style={{ color: "#bdbdbd" }}>—</div>}
+          </div>
         </div>
       </div>
 
-      {/* Top products */}
-      <div style={{ marginTop: 16, background: "#0d0d0d", border: "1px solid #222", borderRadius: 16, padding: 14 }}>
-        <div style={{ fontWeight: 900 }}>Top productos</div>
-        <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>Top 15 por monto vendido</div>
-
-        <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-          {(data?.topProducts ?? []).map((p) => (
-            <div
-              key={p.productId}
-              style={{
-                border: "1px solid #222",
-                borderRadius: 12,
-                padding: 12,
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                alignItems: "center",
-              }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 900 }}>
-                  {p.name} <span style={{ color: "#bdbdbd" }}>({p.category})</span>
-                </div>
-                <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>
-                  Cantidad: <b>{p.qty}</b>
-                </div>
-              </div>
-              <div style={{ fontWeight: 900 }}>{fmtCLP(p.gross)}</div>
-            </div>
-          ))}
-
-          {(data?.topProducts?.length ?? 0) === 0 && <div style={{ color: "#bdbdbd" }}>Sin datos.</div>}
+      {data?.from && data?.to && (
+        <div style={{ marginTop: 10, color: "#bdbdbd", fontSize: 12 }}>
+          Rango: {new Date(data.from).toLocaleString()} → {new Date(data.to).toLocaleString()}
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
-function Card({ title, value }: { title: string; value: string }) {
-  return (
-    <div style={{ background: "#0d0d0d", border: "1px solid #222", borderRadius: 16, padding: 14 }}>
-      <div style={{ color: "#bdbdbd", fontSize: 12 }}>{title}</div>
-      <div style={{ fontWeight: 900, fontSize: 20, marginTop: 6 }}>{value}</div>
-    </div>
-  );
+function card(): React.CSSProperties {
+  return {
+    background: "#0d0d0d",
+    border: "1px solid #222",
+    borderRadius: 16,
+    padding: 14,
+  };
 }
-
+function cardTitle(): React.CSSProperties {
+  return { fontWeight: 900, color: "#bdbdbd", fontSize: 12 };
+}
+function cardBig(): React.CSSProperties {
+  return { fontWeight: 900, fontSize: 22, marginTop: 8 };
+}
+function cardMeta(): React.CSSProperties {
+  return { color: "#bdbdbd", fontSize: 12, marginTop: 6 };
+}
+function linkPill(): React.CSSProperties {
+  return {
+    color: "#f5c400",
+    fontWeight: 900,
+    textDecoration: "none",
+    border: "1px solid #f5c400",
+    padding: "8px 12px",
+    borderRadius: 12,
+    background: "#0d0d0d",
+  };
+}
 function btn(): React.CSSProperties {
   return {
     padding: "10px 14px",
@@ -222,7 +212,6 @@ function btn(): React.CSSProperties {
     whiteSpace: "nowrap",
   };
 }
-
 function btnSecondary(): React.CSSProperties {
   return {
     padding: "10px 14px",

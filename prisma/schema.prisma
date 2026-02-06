@@ -50,6 +50,7 @@ model User {
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  cashouts Cashout[]
 
   openedTickets Ticket[]  @relation("OpenedBy")
   payments      Payment[] @relation("PaidBy")
@@ -136,5 +137,24 @@ model StockMovement {
   createdById String
   createdAt   DateTime      @default(now())
 }
+
+model Cashout {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  from      DateTime
+  to        DateTime
+
+  orders    Int
+  totalCash Int
+  totalDebit Int
+  total     Int
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, from, to])
+}
+
 
 
