@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
@@ -13,29 +13,20 @@ type TableState = {
   ticket: any | null;
 };
 
-type SessionUser = {
-  role: Role;
-  name?: string;
-  username?: string;
-};
-
 export default function TablesPage() {
   const r = useRouter();
 
-  const [tables, setTables] = useState<TableState[]>([]);
+  const [tables, setTables] = useState<TableState[] | null>(null); // null = cargando
   const [err, setErr] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
-  // ✅ user en 3 estados:
-  // undefined = cargando localStorage
-  // null = no hay sesión
-  // object = sesión OK
-  const [user, setUser] = useState<SessionUser | null | undefined>(undefined);
+  const isMounted = useRef(true);
 
   // ✅ cargar user una sola vez
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("user");
-      setUser(raw ? (JSON.parse(raw) as SessionUser) : null);
+      setUser(JSON.parse(localStorage.getItem("user") || "null"));
     } catch {
       setUser(null);
     }
@@ -49,26 +40,44 @@ export default function TablesPage() {
   const canReports = role === "MASTER" || role === "SLAVE"; // watch
   const canCashout = role === "SELLER"; // cerrar diario
 
+  // ✅ normaliza cualquier forma de respuesta: [] o {tables:[]}
+  function normalizeTables(data: any): TableState[] {
+    if (Array.isArray(data)) return data as TableState[];
+    if (Array.isArray(data?.tables)) return data.tables as TableState[];
+    return [];
+  }
+
   async function refresh() {
     try {
       setErr(null);
-      const data = await api<TableState[]>("/tables");
-      setTables(data);
-    } catch (e) {
+      setLoading(true);
+
+      const raw = await api<any>("/tables");
+      const arr = normalizeTables(raw);
+
+      if (isMounted.current) setTables(arr);
+    } catch (e: any) {
       console.error(e);
-      setErr("No pude cargar mesas. Revisa login/API.");
+      if (isMounted.current) {
+        setErr(e?.message || "No pude cargar mesas. Revisa login/API.");
+        setTables([]); // para que al menos muestre estado
+      }
+    } finally {
+      if (isMounted.current) setLoading(false);
     }
   }
 
-  // ✅ refrescar SOLO cuando ya cargó user (y hay sesión)
   useEffect(() => {
-    if (user === undefined) return; // todavía cargando
-    if (user === null) return; // sin sesión (api() igual te mandará a /login si intenta)
+    isMounted.current = true;
     refresh();
+
     const t = setInterval(refresh, 2000);
-    return () => clearInterval(t);
+    return () => {
+      isMounted.current = false;
+      clearInterval(t);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, []);
 
   async function goTable(t: TableState) {
     try {
@@ -86,8 +95,9 @@ export default function TablesPage() {
         body: JSON.stringify({ tableId: t.id }),
       });
 
-      // recargar mesas y obtener ticket recién creado
-      const data = await api<TableState[]>("/tables");
+      // recargar y obtener ticket recién creado
+      const raw = await api<any>("/tables");
+      const data = normalizeTables(raw);
       setTables(data);
 
       const opened = data.find((x) => x.id === t.id)?.ticket;
@@ -105,25 +115,27 @@ export default function TablesPage() {
     r.replace("/login");
   }
 
-  // ✅ GUARD BEFORE RETURN (esto es lo que te faltaba)
-  if (user === undefined) {
-    return (
-      <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>
-        Cargando sesión…
-      </div>
-    );
-  }
+  const hasTables = useMemo(() => Array.isArray(tables) && tables.length > 0, [tables]);
 
   return (
     <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
         <div>
           <h1 style={{ margin: 0 }}>Mesas & Barra</h1>
           <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>Producción · anti-magia</div>
           {role && (
             <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>
               Rol: <b style={{ color: "#fff" }}>{role}</b>
+              {loading && <span style={{ marginLeft: 10, color: "#f5c400" }}>⏳ refrescando…</span>}
             </div>
           )}
         </div>
@@ -161,11 +173,25 @@ export default function TablesPage() {
 
       {err && <div style={{ marginTop: 10, color: "#ff4d4d" }}>{err}</div>}
 
-      {/* Si no hay mesas, lo mostramos explícito */}
-      {tables.length === 0 ? (
-        <div style={{ marginTop: 16, color: "#bdbdbd" }}>No hay mesas para mostrar (o aún cargando).</div>
+      {/* Estado loading / vacío */}
+      {tables === null ? (
+        <div style={{ marginTop: 16, color: "#bdbdbd" }}>Cargando mesas…</div>
+      ) : !hasTables ? (
+        <div style={{ marginTop: 16, color: "#bdbdbd" }}>
+          No hay mesas para mostrar (o la API devolvió vacío). Si en Network ves 200 con data, revisa formato:
+          <div style={{ marginTop: 6, fontSize: 12, color: "#777" }}>
+            * Este page acepta <code>[]</code> o <code>{"{ tables: [] }"}</code>.
+          </div>
+        </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginTop: 16 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            gap: 14,
+            marginTop: 16,
+          }}
+        >
           {tables.map((t) => {
             const busy = !!t.ticket;
             const border = busy ? "#d6aa00" : "#f5c400";
