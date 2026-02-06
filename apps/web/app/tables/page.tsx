@@ -23,7 +23,6 @@ export default function TablesPage() {
 
   const isMounted = useRef(true);
 
-  // ✅ cargar user una sola vez
   useEffect(() => {
     try {
       setUser(JSON.parse(localStorage.getItem("user") || "null"));
@@ -34,16 +33,48 @@ export default function TablesPage() {
 
   const role: Role | undefined = user?.role;
 
-  // ✅ permisos por rol
   const canUsers = role === "MASTER" || role === "SLAVE";
   const canProducts = role === "MASTER" || role === "SLAVE";
-  const canReports = role === "MASTER" || role === "SLAVE"; // watch
-  const canCashout = role === "SELLER"; // cerrar diario
+  const canReports = role === "MASTER" || role === "SLAVE";
+  const canCashout = role === "SELLER";
 
-  // ✅ normaliza cualquier forma de respuesta: [] o {tables:[]}
-  function normalizeTables(data: any): TableState[] {
+  // ✅ normalizador ultra robusto
+  function normalizeTables(raw: any): TableState[] {
+    let data = raw;
+
+    // 1) si viene texto, intentar parsear
+    if (typeof data === "string") {
+      const s = data.trim();
+      if ((s.startsWith("{") && s.endsWith("}")) || (s.startsWith("[") && s.endsWith("]"))) {
+        try {
+          data = JSON.parse(s);
+        } catch {
+          return [];
+        }
+      } else {
+        return [];
+      }
+    }
+
+    // 2) si ya es array
     if (Array.isArray(data)) return data as TableState[];
-    if (Array.isArray(data?.tables)) return data.tables as TableState[];
+
+    // 3) posibles wrappers comunes
+    const candidates = [
+      data?.tables,
+      data?.data,
+      data?.items,
+      data?.result,
+      data?.rows,
+      data?.payload,
+      data?.value,
+      data?.body,
+    ];
+
+    for (const c of candidates) {
+      if (Array.isArray(c)) return c as TableState[];
+    }
+
     return [];
   }
 
@@ -55,12 +86,17 @@ export default function TablesPage() {
       const raw = await api<any>("/tables");
       const arr = normalizeTables(raw);
 
+      // debug pro: si te vuelve a pasar, esto te dice qué llegó realmente
+      if (arr.length === 0) {
+        console.log("[/tables] raw response:", raw);
+      }
+
       if (isMounted.current) setTables(arr);
     } catch (e: any) {
       console.error(e);
       if (isMounted.current) {
         setErr(e?.message || "No pude cargar mesas. Revisa login/API.");
-        setTables([]); // para que al menos muestre estado
+        setTables([]);
       }
     } finally {
       if (isMounted.current) setLoading(false);
@@ -83,19 +119,16 @@ export default function TablesPage() {
     try {
       setErr(null);
 
-      // si ya hay ticket, ir directo
       if (t.ticket?.id) {
         r.push(`/tickets/${t.ticket.id}`);
         return;
       }
 
-      // abrir ticket
       await api("/tickets/open", {
         method: "POST",
         body: JSON.stringify({ tableId: t.id }),
       });
 
-      // recargar y obtener ticket recién creado
       const raw = await api<any>("/tables");
       const data = normalizeTables(raw);
       setTables(data);
@@ -119,16 +152,7 @@ export default function TablesPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>
-      {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ margin: 0 }}>Mesas & Barra</h1>
           <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>Producción · anti-magia</div>
@@ -173,41 +197,24 @@ export default function TablesPage() {
 
       {err && <div style={{ marginTop: 10, color: "#ff4d4d" }}>{err}</div>}
 
-      {/* Estado loading / vacío */}
       {tables === null ? (
         <div style={{ marginTop: 16, color: "#bdbdbd" }}>Cargando mesas…</div>
       ) : !hasTables ? (
         <div style={{ marginTop: 16, color: "#bdbdbd" }}>
-          No hay mesas para mostrar (o la API devolvió vacío). Si en Network ves 200 con data, revisa formato:
+          No hay mesas para mostrar (o la respuesta viene envuelta en otra propiedad).
           <div style={{ marginTop: 6, fontSize: 12, color: "#777" }}>
-            * Este page acepta <code>[]</code> o <code>{"{ tables: [] }"}</code>.
+            Revisa Console: dejé un <code>console.log("[/tables] raw response:", raw)</code> cuando queda vacío.
           </div>
         </div>
       ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-            gap: 14,
-            marginTop: 16,
-          }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginTop: 16 }}>
           {tables.map((t) => {
             const busy = !!t.ticket;
             const border = busy ? "#d6aa00" : "#f5c400";
             const bg = busy ? "#1a1400" : "#0f0f0f";
 
             return (
-              <div
-                key={t.id}
-                style={{
-                  background: bg,
-                  border: `2px solid ${border}`,
-                  borderRadius: 18,
-                  padding: 14,
-                  minHeight: 110,
-                }}
-              >
+              <div key={t.id} style={{ background: bg, border: `2px solid ${border}`, borderRadius: 18, padding: 14, minHeight: 110 }}>
                 <div style={{ fontWeight: 900, fontSize: 16 }}>{t.name}</div>
                 <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
                   {busy ? `Activo: ${t.ticket.kind} · ${t.ticket.status}` : "Libre"}
