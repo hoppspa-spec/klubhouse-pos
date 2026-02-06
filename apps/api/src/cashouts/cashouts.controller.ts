@@ -1,44 +1,41 @@
-import { Controller, Get, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
-import { Response } from "express";
-import { CashoutsService } from "./cashouts.service";
+import { Controller, Get, Post, Query, Req, UseGuards, ForbiddenException } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../auth/roles.decorator";
 import { Role } from "@prisma/client";
+import { CashoutsService } from "./cashouts.service";
 
 @Controller("cashouts")
 @UseGuards(AuthGuard, RolesGuard)
 export class CashoutsController {
   constructor(private svc: CashoutsService) {}
 
-  // ✅ seller ve su preview (por defecto desde último cierre o desde hoy 00:00)
+  // ✅ SELLER: ver resumen de su día (preview)
   @Get("preview")
-  @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
+  @Roles(Role.SELLER)
   preview(@Req() req: any) {
     return this.svc.previewForUser(req.user.sub);
   }
 
-  // ✅ seller cierra su caja (crea registro)
+  // ✅ SELLER: cerrar caja diaria (V1)
   @Post("close")
-  @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
+  @Roles(Role.SELLER)
   close(@Req() req: any) {
     return this.svc.closeForUser(req.user.sub);
   }
 
-  // ✅ admin/manager: listado de cierres
-  @Get()
+  // ✅ MASTER/SLAVE: solo watch (listado global)
+  @Get("list")
   @Roles(Role.MASTER, Role.SLAVE)
   list(@Query("from") from?: string, @Query("to") to?: string) {
     return this.svc.list(from, to);
   }
 
-  // ✅ admin/manager: descarga CSV
+  // ✅ MASTER/SLAVE: CSV global
   @Get("csv")
   @Roles(Role.MASTER, Role.SLAVE)
-  async csv(@Res() res: Response, @Query("from") from?: string, @Query("to") to?: string) {
+  async csv(@Query("from") from?: string, @Query("to") to?: string) {
     const csv = await this.svc.csv(from, to);
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="cashouts.csv"`);
-    return res.send(csv);
+    return csv; // el web lo baja como text/csv
   }
 }
