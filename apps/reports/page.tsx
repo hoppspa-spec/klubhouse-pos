@@ -1,203 +1,199 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api } from "../../lib/api";
 
 type Role = "MASTER" | "SLAVE" | "SELLER";
-type Range = "DAY" | "WEEK" | "MONTH";
 
-type ReportsSummary = {
-  range: Range;
-  from: string;
-  to: string;
-
-  rentalsCount: number;
-  rentalsMinutes: number;
-  rentalsAmount: number;
-
-  productsAmount: number;
-  topProducts: { name: string; qty: number; amount: number }[];
+type ReportRow = {
+  paidAt: string;
+  receiptNumber?: number;
+  method: "CASH" | "DEBIT";
+  totalAmount: number;
+  ticketId: string;
+  kind?: "RENTAL" | "BAR";
+  tableName?: string;
+  sellerName?: string;
 };
 
 export default function ReportsPage() {
-  const r = useRouter();
+  const [role, setRole] = useState<Role | null>(null);
 
-  const [user, setUser] = useState<{ role: Role; name?: string; username?: string } | null>(null);
-  const role = user?.role;
+  const [from, setFrom] = useState(() => isoDayStart(new Date()));
+  const [to, setTo] = useState(() => isoNowPlus1min());
 
-  const isManager = role === "MASTER" || role === "SLAVE";
-
-  const [range, setRange] = useState<Range>("DAY");
-  const [data, setData] = useState<ReportsSummary | null>(null);
+  const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     try {
-      const u = localStorage.getItem("user");
-      setUser(u ? JSON.parse(u) : null);
+      const u = JSON.parse(localStorage.getItem("user") || "null");
+      setRole(u?.role ?? null);
     } catch {
-      setUser(null);
+      setRole(null);
     }
   }, []);
 
+  const isManager = role === "MASTER" || role === "SLAVE";
+
+  const totals = useMemo(() => {
+    const total = rows.reduce((a, r) => a + Number(r.totalAmount || 0), 0);
+    const cash = rows.filter(r => r.method === "CASH").reduce((a, r) => a + Number(r.totalAmount || 0), 0);
+    const debit = rows.filter(r => r.method === "DEBIT").reduce((a, r) => a + Number(r.totalAmount || 0), 0);
+    return { total, cash, debit, count: rows.length };
+  }, [rows]);
+
   async function load() {
-    setErr(null);
     setLoading(true);
+    setErr(null);
     try {
-      // si no tienes este endpoint aún, igual compila y verás error bonito
-      const out = await api<ReportsSummary>(`/reports/summary?range=${range}`);
-      setData(out);
+      const out = await api<{ rows: ReportRow[] }>(`/cashouts/list?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+      setRows(out?.rows ?? []);
     } catch (e: any) {
       console.error(e);
-      setData(null);
-      setErr(e?.message || "No pude cargar reportes.");
+      setErr(e?.message || "No pude cargar reporte");
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => {
-    if (!user) return;
-    if (!isManager) return; // seller no entra
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, range]);
-
-  if (!user) {
-    return <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>Cargando…</div>;
+  async function downloadCsv() {
+    setErr(null);
+    try {
+      const csv = await api<string>(`/cashouts/csv?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `movimiento_${from.slice(0, 10)}_a_${to.slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      console.error(e);
+      setErr(e?.message || "No pude descargar CSV");
+    }
   }
 
-  if (!isManager) {
-    return (
-      <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>
-        <div style={{ fontWeight: 900, fontSize: 18 }}>Control & Estadísticas</div>
-        <div style={{ marginTop: 8, color: "#bdbdbd" }}>
-          Este módulo es solo para <b>ADMIN/MANAGER</b>.
-        </div>
-        <button onClick={() => r.replace("/tables")} style={btnSecondary()}>
-          ← Volver
-        </button>
-      </div>
-    );
+  function quickRange(kind: "DAY" | "WEEK" | "MONTH") {
+    const now = new Date();
+    if (kind === "DAY") {
+      setFrom(isoDayStart(now));
+      setTo(isoNowPlus1min());
+      return;
+    }
+    if (kind === "WEEK") {
+      const d = new Date(now);
+      const day = (d.getDay() + 6) % 7; // lunes=0
+      d.setDate(d.getDate() - day);
+      d.setHours(0, 0, 0, 0);
+      setFrom(d.toISOString());
+      setTo(isoNowPlus1min());
+      return;
+    }
+    // MONTH
+    const m = new Date(now);
+    m.setDate(1);
+    m.setHours(0, 0, 0, 0);
+    setFrom(m.toISOString());
+    setTo(isoNowPlus1min());
   }
 
   return (
     <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontWeight: 900, fontSize: 22 }}>📊 Control & Estadísticas</div>
-          <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
-            {user?.name || user?.username || "Usuario"} · <b>{role}</b>
-          </div>
+          <div style={{ fontWeight: 900, fontSize: 22 }}>Reportes</div>
+          <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>Rol: {role ?? "NO_ROLE"}</div>
         </div>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <a href="/tables" style={linkPill()}>
-            ← Mesas
-          </a>
-          <button onClick={load} disabled={loading} style={btnSecondary()}>
-            Refrescar
-          </button>
-        </div>
+        <a href="/tables" style={{ color: "#f5c400", fontWeight: 900, textDecoration: "none" }}>
+          ← Mesas
+        </a>
       </div>
+
+      {!isManager && (
+        <div style={{ marginTop: 12, color: "#bdbdbd", fontSize: 12 }}>
+          * Solo MASTER/SLAVE pueden ver reportes globales (V1).
+        </div>
+      )}
 
       {err && <div style={{ marginTop: 12, color: "#ff4d4d" }}>{err}</div>}
 
-      <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <button onClick={() => setRange("DAY")} disabled={loading} style={range === "DAY" ? btn() : btnSecondary()}>
-          Diario
-        </button>
-        <button onClick={() => setRange("WEEK")} disabled={loading} style={range === "WEEK" ? btn() : btnSecondary()}>
-          Semanal
-        </button>
-        <button onClick={() => setRange("MONTH")} disabled={loading} style={range === "MONTH" ? btn() : btnSecondary()}>
-          Mensual
-        </button>
-      </div>
+      <div style={{ marginTop: 14, background: "#0d0d0d", border: "1px solid #222", borderRadius: 16, padding: 14 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <button disabled={!isManager || loading} onClick={() => quickRange("DAY")} style={btnSecondary()}>Hoy</button>
+          <button disabled={!isManager || loading} onClick={() => quickRange("WEEK")} style={btnSecondary()}>Semana</button>
+          <button disabled={!isManager || loading} onClick={() => quickRange("MONTH")} style={btnSecondary()}>Mes</button>
 
-      {/* Cards */}
-      <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
-        <div style={card()}>
-          <div style={cardTitle()}>Arriendos</div>
-          <div style={cardBig()}>{data?.rentalsCount ?? "—"}</div>
-          <div style={cardMeta()}>Cantidad</div>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <input disabled={!isManager || loading} value={from} onChange={(e) => setFrom(e.target.value)} style={inpWide()} />
+            <input disabled={!isManager || loading} value={to} onChange={(e) => setTo(e.target.value)} style={inpWide()} />
+            <button disabled={!isManager || loading} onClick={load} style={btn()}>Consultar</button>
+            <button disabled={!isManager || loading || rows.length === 0} onClick={downloadCsv} style={btnSecondary()}>
+              Descargar CSV
+            </button>
+          </div>
         </div>
 
-        <div style={card()}>
-          <div style={cardTitle()}>Minutos</div>
-          <div style={cardBig()}>{data?.rentalsMinutes ?? "—"}</div>
-          <div style={cardMeta()}>Tiempo total</div>
-        </div>
-
-        <div style={card()}>
-          <div style={cardTitle()}>$ Arriendos</div>
-          <div style={cardBig()}>${data?.rentalsAmount ?? "—"}</div>
-          <div style={cardMeta()}>Total arriendo</div>
+        <div style={{ marginTop: 12, color: "#bdbdbd", fontSize: 12 }}>
+          Movimientos: <b style={{ color: "#fff" }}>{totals.count}</b> · CASH: <b style={{ color: "#fff" }}>${totals.cash}</b> · DEBIT:{" "}
+          <b style={{ color: "#fff" }}>${totals.debit}</b> · TOTAL: <b style={{ color: "#f5c400" }}>${totals.total}</b>
         </div>
       </div>
 
-      <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-        <div style={card()}>
-          <div style={cardTitle()}>$ Productos</div>
-          <div style={cardBig()}>${data?.productsAmount ?? "—"}</div>
-          <div style={cardMeta()}>Total ventas productos</div>
-        </div>
+      <div style={{ marginTop: 14, background: "#0d0d0d", border: "1px solid #222", borderRadius: 16, padding: 14 }}>
+        <div style={{ fontWeight: 900 }}>Detalle</div>
 
-        <div style={card()}>
-          <div style={cardTitle()}>Top productos</div>
-          <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-            {(data?.topProducts || []).slice(0, 8).map((p, idx) => (
-              <div key={idx} style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  <b>{p.name}</b>
-                </div>
-                <div style={{ color: "#bdbdbd" }}>
-                  {p.qty}u · <b>${p.amount}</b>
+        {rows.length === 0 ? (
+          <div style={{ marginTop: 10, color: "#bdbdbd" }}>Sin movimientos en el rango.</div>
+        ) : (
+          <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+            {rows.map((r, idx) => (
+              <div key={idx} style={{ border: "1px solid #222", borderRadius: 14, padding: 12, display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 900 }}>
+                    ${r.totalAmount} · {r.method}{" "}
+                    <span style={{ color: "#bdbdbd", fontWeight: 700 }}>
+                      · {new Date(r.paidAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>
+                    Ticket: {r.ticketId}
+                    {r.tableName ? ` · ${r.tableName}` : ""}
+                    {r.kind ? ` · ${r.kind}` : ""}
+                    {r.sellerName ? ` · ${r.sellerName}` : ""}
+                  </div>
                 </div>
               </div>
             ))}
-            {(data?.topProducts || []).length === 0 && <div style={{ color: "#bdbdbd" }}>—</div>}
           </div>
-        </div>
+        )}
       </div>
-
-      {data?.from && data?.to && (
-        <div style={{ marginTop: 10, color: "#bdbdbd", fontSize: 12 }}>
-          Rango: {new Date(data.from).toLocaleString()} → {new Date(data.to).toLocaleString()}
-        </div>
-      )}
     </div>
   );
 }
 
-function card(): React.CSSProperties {
+function isoDayStart(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x.toISOString();
+}
+function isoNowPlus1min() {
+  const x = new Date(Date.now() + 60_000);
+  return x.toISOString();
+}
+
+function inpWide(): React.CSSProperties {
   return {
-    background: "#0d0d0d",
-    border: "1px solid #222",
-    borderRadius: 16,
-    padding: 14,
-  };
-}
-function cardTitle(): React.CSSProperties {
-  return { fontWeight: 900, color: "#bdbdbd", fontSize: 12 };
-}
-function cardBig(): React.CSSProperties {
-  return { fontWeight: 900, fontSize: 22, marginTop: 8 };
-}
-function cardMeta(): React.CSSProperties {
-  return { color: "#bdbdbd", fontSize: 12, marginTop: 6 };
-}
-function linkPill(): React.CSSProperties {
-  return {
-    color: "#f5c400",
-    fontWeight: 900,
-    textDecoration: "none",
-    border: "1px solid #f5c400",
-    padding: "8px 12px",
+    width: "min(260px, 100%)",
+    padding: "10px 12px",
     borderRadius: 12,
-    background: "#0d0d0d",
+    border: "1px solid #333",
+    background: "#111",
+    color: "#fff",
+    outline: "none",
+    fontFamily: "monospace",
+    fontSize: 12,
   };
 }
 function btn(): React.CSSProperties {

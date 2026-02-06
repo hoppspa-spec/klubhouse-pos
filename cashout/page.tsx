@@ -1,89 +1,64 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { api } from "../../lib/api";
 
 type Role = "MASTER" | "SLAVE" | "SELLER";
 
-type CashoutResult = {
-  ok: boolean;
-  from: string;
-  to: string;
-  total: number;
-  cashTotal: number;
-  debitTotal: number;
-  count: number;
-};
-
 export default function CashoutPage() {
-  const r = useRouter();
-
-  const [user, setUser] = useState<{ role: Role; name?: string; username?: string } | null>(null);
-  const role = user?.role;
-
-  const canCashout = role === "MASTER" || role === "SLAVE" || role === "SELLER";
-
+  const [role, setRole] = useState<Role | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [done, setDone] = useState<CashoutResult | null>(null);
+  const [summary, setSummary] = useState<any>(null);
 
   useEffect(() => {
     try {
-      const u = localStorage.getItem("user");
-      setUser(u ? JSON.parse(u) : null);
+      const u = JSON.parse(localStorage.getItem("user") || "null");
+      setRole(u?.role ?? null);
     } catch {
-      setUser(null);
+      setRole(null);
     }
   }, []);
 
-  async function closeCashout() {
-    setErr(null);
-    setDone(null);
+  const isSeller = role === "SELLER";
+  const isManager = role === "MASTER" || role === "SLAVE";
+
+  async function preview() {
     setLoading(true);
+    setErr(null);
     try {
-      const out = await api<CashoutResult>("/cashouts/close", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      setDone(out);
+      const out = await api<any>(`/cashouts/preview`);
+      setSummary(out);
     } catch (e: any) {
       console.error(e);
-      setErr(e?.message || "No pude cerrar caja.");
+      setErr(e?.message || "No pude previsualizar caja");
     } finally {
       setLoading(false);
     }
   }
 
-  if (!user) {
-    return <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>Cargando…</div>;
+  async function close() {
+    setLoading(true);
+    setErr(null);
+    try {
+      const out = await api<any>(`/cashouts/close`, { method: "POST" });
+      setSummary(out);
+    } catch (e: any) {
+      console.error(e);
+      setErr(e?.message || "No pude cerrar caja");
+    } finally {
+      setLoading(false);
+    }
   }
-
-  if (!canCashout) {
-    return (
-      <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>
-        <div style={{ fontWeight: 900, fontSize: 18 }}>💰 Cerrar caja</div>
-        <div style={{ marginTop: 8, color: "#bdbdbd" }}>No tienes permisos para cerrar caja.</div>
-        <button onClick={() => r.replace("/tables")} style={btnSecondary()}>
-          ← Volver
-        </button>
-      </div>
-    );
-  }
-
-  const who = user.name || user.username || "Usuario";
 
   return (
     <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <div>
-          <div style={{ fontWeight: 900, fontSize: 22 }}>💰 Cerrar caja</div>
-          <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
-            {who} · <b>{role}</b>
-          </div>
+          <div style={{ fontWeight: 900, fontSize: 22 }}>Caja del turno</div>
+          <div style={{ color: "#bdbdbd", marginTop: 6, fontSize: 12 }}>Rol: {role ?? "NO_ROLE"}</div>
         </div>
-
-        <a href="/tables" style={linkPill()}>
+        <a href="/tables" style={{ color: "#f5c400", fontWeight: 900, textDecoration: "none" }}>
           ← Mesas
         </a>
       </div>
@@ -91,72 +66,35 @@ export default function CashoutPage() {
       {err && <div style={{ marginTop: 12, color: "#ff4d4d" }}>{err}</div>}
 
       <div style={{ marginTop: 16, background: "#0d0d0d", border: "1px solid #222", borderRadius: 16, padding: 14 }}>
-        <div style={{ fontWeight: 900 }}>Acción</div>
-        <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
-          Genera un resumen del turno (CASH/DEBIT) para el usuario logueado.
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button disabled={loading || !(isSeller || isManager)} onClick={preview} style={btnSecondary()}>
+            Ver resumen de hoy
+          </button>
+          <button disabled={loading || !(isSeller || isManager)} onClick={close} style={btn()}>
+            Cerrar caja (hoy)
+          </button>
         </div>
 
-        <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button onClick={closeCashout} disabled={loading} style={btn()}>
-            {loading ? "Cerrando..." : "Cerrar caja ahora"}
-          </button>
-          <button onClick={() => r.replace("/tables")} disabled={loading} style={btnSecondary()}>
-            Cancelar
-          </button>
-        </div>
+        {summary && (
+          <div style={{ marginTop: 14, color: "#bdbdbd", fontSize: 13 }}>
+            <div>Rango: <b style={{ color: "#fff" }}>{summary.from}</b> → <b style={{ color: "#fff" }}>{summary.to}</b></div>
+            <div style={{ marginTop: 6 }}>
+              Movimientos: <b style={{ color: "#fff" }}>{summary.count}</b> · CASH: <b style={{ color: "#fff" }}>${summary.cash}</b> · DEBIT:{" "}
+              <b style={{ color: "#fff" }}>${summary.debit}</b> · TOTAL: <b style={{ color: "#f5c400" }}>${summary.total}</b>
+            </div>
+          </div>
+        )}
+
+        {!isSeller && !isManager && (
+          <div style={{ marginTop: 10, color: "#bdbdbd", fontSize: 12 }}>
+            * Sin permisos para caja (V1).
+          </div>
+        )}
       </div>
-
-      {done && (
-        <div style={{ marginTop: 16, background: "#0d0d0d", border: "1px solid #222", borderRadius: 16, padding: 14 }}>
-          <div style={{ fontWeight: 900 }}>Resultado</div>
-          <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
-            {new Date(done.from).toLocaleString()} → {new Date(done.to).toLocaleString()}
-          </div>
-
-          <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
-            <div style={statBox()}>
-              <div style={statLabel()}>Ventas</div>
-              <div style={statBig()}>{done.count}</div>
-            </div>
-            <div style={statBox()}>
-              <div style={statLabel()}>CASH</div>
-              <div style={statBig()}>${done.cashTotal}</div>
-            </div>
-            <div style={statBox()}>
-              <div style={statLabel()}>DEBIT</div>
-              <div style={statBig()}>${done.debitTotal}</div>
-            </div>
-            <div style={statBox()}>
-              <div style={statLabel()}>TOTAL</div>
-              <div style={statBig()}>${done.total}</div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-function statBox(): React.CSSProperties {
-  return { border: "1px solid #222", borderRadius: 14, padding: 12, background: "#111" };
-}
-function statLabel(): React.CSSProperties {
-  return { color: "#bdbdbd", fontSize: 12, fontWeight: 900 };
-}
-function statBig(): React.CSSProperties {
-  return { marginTop: 8, fontWeight: 900, fontSize: 18 };
-}
-function linkPill(): React.CSSProperties {
-  return {
-    color: "#f5c400",
-    fontWeight: 900,
-    textDecoration: "none",
-    border: "1px solid #f5c400",
-    padding: "8px 12px",
-    borderRadius: 12,
-    background: "#0d0d0d",
-  };
-}
 function btn(): React.CSSProperties {
   return {
     padding: "10px 14px",
