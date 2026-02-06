@@ -20,7 +20,7 @@ export default function TablesPage() {
   const [err, setErr] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
 
-  // ✅ cargar user una sola vez
+  // ✅ cargar user una sola vez (sin romper SSR)
   useEffect(() => {
     try {
       setUser(JSON.parse(localStorage.getItem("user") || "null"));
@@ -31,7 +31,7 @@ export default function TablesPage() {
 
   const role: Role | undefined = user?.role;
 
-  // ✅ permisos por rol (según lo que pediste)
+  // ✅ permisos por rol
   const canUsers = role === "MASTER" || role === "SLAVE";
   const canProducts = role === "MASTER" || role === "SLAVE";
   const canReports = role === "MASTER" || role === "SLAVE"; // watch
@@ -58,16 +58,19 @@ export default function TablesPage() {
     try {
       setErr(null);
 
+      // si ya hay ticket, ir directo
       if (t.ticket?.id) {
         r.push(`/tickets/${t.ticket.id}`);
         return;
       }
 
+      // abrir ticket
       await api("/tickets/open", {
         method: "POST",
         body: JSON.stringify({ tableId: t.id }),
       });
 
+      // recargar mesas y obtener ticket recién creado
       const data = await api<TableState[]>("/tables");
       setTables(data);
 
@@ -101,12 +104,14 @@ export default function TablesPage() {
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          {/* ✅ 0) BOTÓN REPORTES (solo MASTER/SLAVE) */}
           {canReports && (
             <a href="/reports" style={linkBtn()}>
               Reportes
             </a>
           )}
 
+          {/* ✅ 0b) BOTÓN CAJA (solo SELLER) */}
           {canCashout && (
             <a href="/cashout" style={linkBtn()}>
               Caja (mi turno)
