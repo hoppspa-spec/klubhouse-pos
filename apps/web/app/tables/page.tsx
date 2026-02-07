@@ -13,22 +13,68 @@ type TableState = {
   ticket: any | null;
 };
 
+function normalizeTables(raw: any): TableState[] {
+  let v = raw;
+
+  // Si vino como string JSON
+  if (typeof v === "string") {
+    const s = v.trim();
+    if ((s.startsWith("{") && s.endsWith("}")) || (s.startsWith("[") && s.endsWith("]"))) {
+      try {
+        v = JSON.parse(s);
+      } catch {
+        return [];
+      }
+    } else {
+      return [];
+    }
+  }
+
+  // Si ya es array
+  if (Array.isArray(v)) return v as TableState[];
+
+  // Si viene envuelto
+  const candidates = [v?.tables, v?.data, v?.items, v?.result, v?.rows, v?.payload, v?.value, v?.body];
+  for (const c of candidates) if (Array.isArray(c)) return c as TableState[];
+
+  return [];
+}
+
 export default function TablesPage() {
   const r = useRouter();
 
-  const [tables, setTables] = useState<TableState[] | null>(null); // null = cargando
+  const mounted = useRef(true);
+
+  const [tables, setTables] = useState<TableState[] | null>(null); // null = loading
   const [err, setErr] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const isMounted = useRef(true);
+  // user + token
+  const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
+    mounted.current = true;
+
     try {
       setUser(JSON.parse(localStorage.getItem("user") || "null"));
     } catch {
       setUser(null);
     }
+
+    const t = localStorage.getItem("accessToken");
+    setToken(t);
+
+    // si no hay token => login
+    if (!t) {
+      localStorage.removeItem("user");
+      r.replace("/login");
+    }
+
+    return () => {
+      mounted.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const role: Role | undefined = user?.role;
@@ -38,82 +84,40 @@ export default function TablesPage() {
   const canReports = role === "MASTER" || role === "SLAVE";
   const canCashout = role === "SELLER";
 
-  // ✅ normalizador ultra robusto
-  function normalizeTables(raw: any): TableState[] {
-    let data = raw;
-
-    // 1) si viene texto, intentar parsear
-    if (typeof data === "string") {
-      const s = data.trim();
-      if ((s.startsWith("{") && s.endsWith("}")) || (s.startsWith("[") && s.endsWith("]"))) {
-        try {
-          data = JSON.parse(s);
-        } catch {
-          return [];
-        }
-      } else {
-        return [];
-      }
-    }
-
-    // 2) si ya es array
-    if (Array.isArray(data)) return data as TableState[];
-
-    // 3) posibles wrappers comunes
-    const candidates = [
-      data?.tables,
-      data?.data,
-      data?.items,
-      data?.result,
-      data?.rows,
-      data?.payload,
-      data?.value,
-      data?.body,
-    ];
-
-    for (const c of candidates) {
-      if (Array.isArray(c)) return c as TableState[];
-    }
-
-    return [];
-  }
-
   async function refresh() {
+    if (!token) return; // no pegarle a la API sin token
+
     try {
       setErr(null);
-      setLoading(true);
+      setRefreshing(true);
 
       const raw = await api<any>("/tables");
-      const arr = normalizeTables(raw);
+      const list = normalizeTables(raw);
 
-      // debug pro: si te vuelve a pasar, esto te dice qué llegó realmente
-      if (arr.length === 0) {
+      if (list.length === 0) {
         console.log("[/tables] raw response:", raw);
       }
 
-      if (isMounted.current) setTables(arr);
+      if (mounted.current) setTables(list);
     } catch (e: any) {
       console.error(e);
-      if (isMounted.current) {
-        setErr(e?.message || "No pude cargar mesas. Revisa login/API.");
-        setTables([]);
+      if (mounted.current) {
+        setErr(e?.message || "No pude cargar mesas.");
+        setTables([]); // para que no quede eternamente loading
       }
     } finally {
-      if (isMounted.current) setLoading(false);
+      if (mounted.current) setRefreshing(false);
     }
   }
 
   useEffect(() => {
-    isMounted.current = true;
-    refresh();
+    if (!token) return;
 
+    refresh();
     const t = setInterval(refresh, 2000);
-    return () => {
-      isMounted.current = false;
-      clearInterval(t);
-    };
+    return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [token]);
 
   async function goTable(t: TableState) {
     try {
@@ -130,10 +134,10 @@ export default function TablesPage() {
       });
 
       const raw = await api<any>("/tables");
-      const data = normalizeTables(raw);
-      setTables(data);
+      const list = normalizeTables(raw);
+      setTables(list);
 
-      const opened = data.find((x) => x.id === t.id)?.ticket;
+      const opened = list.find((x) => x.id === t.id)?.ticket;
       if (opened?.id) r.push(`/tickets/${opened.id}`);
       else setErr("No pude abrir el ticket.");
     } catch (e) {
@@ -159,7 +163,7 @@ export default function TablesPage() {
           {role && (
             <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>
               Rol: <b style={{ color: "#fff" }}>{role}</b>
-              {loading && <span style={{ marginLeft: 10, color: "#f5c400" }}>⏳ refrescando…</span>}
+              {refreshing && <span style={{ marginLeft: 10, color: "#f5c400" }}>⏳ refrescando…</span>}
             </div>
           )}
         </div>
@@ -199,22 +203,24 @@ export default function TablesPage() {
 
       {tables === null ? (
         <div style={{ marginTop: 16, color: "#bdbdbd" }}>Cargando mesas…</div>
-      ) : !hasTables ? (
-        <div style={{ marginTop: 16, color: "#bdbdbd" }}>
-          No hay mesas para mostrar (o la respuesta viene envuelta en otra propiedad).
-          <div style={{ marginTop: 6, fontSize: 12, color: "#777" }}>
-            Revisa Console: dejé un <code>console.log("[/tables] raw response:", raw)</code> cuando queda vacío.
-          </div>
-        </div>
-      ) : (
+      ) : hasTables ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginTop: 16 }}>
-          {tables.map((t) => {
+          {tables!.map((t) => {
             const busy = !!t.ticket;
             const border = busy ? "#d6aa00" : "#f5c400";
             const bg = busy ? "#1a1400" : "#0f0f0f";
 
             return (
-              <div key={t.id} style={{ background: bg, border: `2px solid ${border}`, borderRadius: 18, padding: 14, minHeight: 110 }}>
+              <div
+                key={t.id}
+                style={{
+                  background: bg,
+                  border: `2px solid ${border}`,
+                  borderRadius: 18,
+                  padding: 14,
+                  minHeight: 110,
+                }}
+              >
                 <div style={{ fontWeight: 900, fontSize: 16 }}>{t.name}</div>
                 <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
                   {busy ? `Activo: ${t.ticket.kind} · ${t.ticket.status}` : "Libre"}
@@ -226,6 +232,11 @@ export default function TablesPage() {
               </div>
             );
           })}
+        </div>
+      ) : (
+        <div style={{ marginTop: 16, color: "#bdbdbd" }}>
+          No hay mesas para mostrar (o la API devolvió vacío). Si en Network ves 200 con data, revisa formato:
+          <div style={{ marginTop: 6, fontSize: 12, color: "#777" }}>* Este page acepta [] o {"{ tables: [] }"}.</div>
         </div>
       )}
     </div>
