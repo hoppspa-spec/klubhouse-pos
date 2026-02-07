@@ -11,11 +11,11 @@ import { Role } from "@prisma/client";
 export class TicketsController {
   constructor(private svc: TicketsService) {}
 
-  @Get("tables")
-  @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
-  tables() {
-    return this.svc.getTablesState();
-  }
+@Get("tickets/tables")
+@Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
+tables() {
+  return this.svc.getTablesState();
+}
 
   @Post("tickets/open")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
