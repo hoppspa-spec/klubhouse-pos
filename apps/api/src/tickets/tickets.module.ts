@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { JwtModule } from "@nestjs/jwt";
 import { PrismaModule } from "../prisma/prisma.module";
 import { TicketsController, TicketsPublicController } from "./tickets.controller";
 import { TicketsService } from "./tickets.service";
@@ -6,11 +7,11 @@ import { TicketsService } from "./tickets.service";
 @Module({
   imports: [
     PrismaModule,
-    // OJO: si JwtGlobalModule ya es GLOBAL, no necesitas importar JwtModule aquí.
-    // Si TicketsService usa JwtService y NO tienes global, importa JwtModule.register(...) en tu JwtGlobalModule.
+    JwtModule, // si ya tienes JwtGlobalModule global, igual no molesta
   ],
   controllers: [TicketsController, TicketsPublicController],
   providers: [TicketsService],
-  exports: [TicketsService], // ✅ CLAVE
+  exports: [TicketsService], // ✅ para que TablesModule lo pueda inyectar
 })
 export class TicketsModule {}
+

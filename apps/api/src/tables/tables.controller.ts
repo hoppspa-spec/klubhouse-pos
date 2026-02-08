@@ -16,4 +16,3 @@ export class TablesController {
     return this.tickets.getTablesState();
   }
 }
-

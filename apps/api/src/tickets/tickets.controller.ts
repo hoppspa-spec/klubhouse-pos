@@ -11,12 +11,6 @@ import { Role } from "@prisma/client";
 export class TicketsController {
   constructor(private svc: TicketsService) {}
 
-@Get("tickets/tables")
-@Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
-tables() {
-  return this.svc.getTablesState();
-}
-
   @Post("tickets/open")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
   open(@Req() req: any, @Body() body: { tableId: number }) {
@@ -29,20 +23,16 @@ tables() {
     return this.svc.addItem(id, body.productId, body.qtyDelta);
   }
 
-  // ✅ SOLO MANAGER/ADMIN puede cerrar arriendo manualmente
+  // ✅ SOLO MANAGER/ADMIN (manual)
   @Post("tickets/:id/close")
   @Roles(Role.MASTER, Role.SLAVE)
-  close(@Req() req: any, @Param("id") id: string) {
-    return this.svc.closeRental(id, req.user.role as Role);
+  close(@Param("id") id: string) {
+    return this.svc.closeRental(id);
   }
 
   @Post("tickets/:id/checkout")
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER)
-  checkout(
-    @Req() req: any,
-    @Param("id") id: string,
-    @Body() body: { method: "CASH" | "DEBIT" }
-  ) {
+  checkout(@Req() req: any, @Param("id") id: string, @Body() body: { method: "CASH" | "DEBIT" }) {
     return this.svc.checkout(id, req.user.sub, body.method, req.user.role as Role);
   }
 
@@ -53,6 +43,7 @@ tables() {
   }
 }
 
+// ✅ Público (voucher)
 @Controller()
 export class TicketsPublicController {
   constructor(private svc: TicketsService) {}

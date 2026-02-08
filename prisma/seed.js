@@ -1,56 +1,38 @@
-/* eslint-disable no-console */
-const { PrismaClient } = require("@prisma/client");
+const { PrismaClient, Role } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 
 const prisma = new PrismaClient();
 
 async function upsertUser({ username, name, role, password }) {
   const passwordHash = await bcrypt.hash(password, 10);
-
   return prisma.user.upsert({
     where: { username },
-    update: {
-      name,
-      role,
-      isActive: true,
-      passwordHash,
-    },
-    create: {
-      username,
-      name,
-      role,
-      isActive: true,
-      passwordHash,
-    },
+    update: { name, role, passwordHash, isActive: true },
+    create: { username, name, role, passwordHash, isActive: true },
   });
 }
 
 async function main() {
-  // ✅ Define credenciales iniciales
-  // Recomendación: después cambia estas claves (pero para el torneo quedan filete).
-  const users = [
-    { username: "admin", name: "Dueño", role: "MASTER", password: "Admin#9021!" },
-    { username: "manager", name: "Manager", role: "SLAVE", password: "Manager#4827!" },
+  // MASTER + SLAVE
+  await upsertUser({ username: "master", name: "Master", role: Role.MASTER, password: "admin1234" });
+  await upsertUser({ username: "manager", name: "Manager", role: Role.SLAVE, password: "admin1234" });
 
-    { username: "seller1", name: "Seller 1", role: "SELLER", password: "Seller1#1359!" },
-    { username: "seller2", name: "Seller 2", role: "SELLER", password: "Seller2#2468!" },
-    { username: "seller3", name: "Seller 3", role: "SELLER", password: "Seller3#9753!" },
-    { username: "seller4", name: "Seller 4", role: "SELLER", password: "Seller4#8642!" },
-    { username: "seller5", name: "Seller 5", role: "SELLER", password: "Seller5#1127!" },
-    { username: "seller6", name: "Seller 6", role: "SELLER", password: "Seller6#7751!" },
-  ];
-
-  for (const u of users) {
-    await upsertUser(u);
+  // 6 SELLERS
+  for (let i = 1; i <= 6; i++) {
+    await upsertUser({
+      username: `seller${i}`,
+      name: `Seller ${i}`,
+      role: Role.SELLER,
+      password: "seller1234",
+    });
   }
 
-  console.log("✅ Seed users OK:");
-  users.forEach((u) => console.log(`- ${u.role} | ${u.username} | ${u.password}`));
+  console.log("✅ Seed listo: master/manager + 6 sellers");
 }
 
 main()
   .catch((e) => {
-    console.error("❌ Seed error", e);
+    console.error(e);
     process.exit(1);
   })
   .finally(async () => {
