@@ -13,7 +13,7 @@ import { CashoutsModule } from "./cashouts/cashouts.module";
     PrismaModule,
     AuthModule,
     TicketsModule,
-    TablesModule,   // ✅ importante
+    TablesModule,
     ProductsModule,
     UsersModule,
     ReportsModule,
@@ -21,6 +21,7 @@ import { CashoutsModule } from "./cashouts/cashouts.module";
   ],
 })
 export class AppModule {}
+
 
 
 
