@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { Role } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import * as bcrypt from "bcryptjs"; // ✅ igual que AuthService
 
 @Injectable()
 export class UsersService {
@@ -16,10 +16,7 @@ export class UsersService {
 
   private ensureCanManage(actorRole: Role, targetRole: Role) {
     if (actorRole === Role.MASTER) return;
-
-    // SLAVE (manager): solo puede manejar SELLER
     if (actorRole === Role.SLAVE && targetRole === Role.SELLER) return;
-
     throw new ForbiddenException("No tienes permisos para esta acción");
   }
 
@@ -69,3 +66,4 @@ export class UsersService {
     return { ok: true };
   }
 }
+
