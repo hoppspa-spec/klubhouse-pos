@@ -1,28 +1,30 @@
 import { Module } from "@nestjs/common";
+
 import { PrismaModule } from "./prisma/prisma.module";
+import { JwtGlobalModule } from "./auth/jwt-global.module"; // ajusta si tu archivo se llama distinto
 import { AuthModule } from "./auth/auth.module";
+
+import { UsersModule } from "./users/users.module";
+import { ProductsModule } from "./products/products.module";
 import { TicketsModule } from "./tickets/tickets.module";
 import { TablesModule } from "./tables/tables.module";
-import { ProductsModule } from "./products/products.module";
-import { UsersModule } from "./users/users.module";
+
 import { ReportsModule } from "./reports/reports.module";
 import { CashoutsModule } from "./cashouts/cashouts.module";
 
 @Module({
   imports: [
     PrismaModule,
+    JwtGlobalModule,
     AuthModule,
-    TicketsModule,
-    TablesModule,
-    ProductsModule,
+
     UsersModule,
+    ProductsModule,
+    TicketsModule,
+    TablesModule, // ✅ NO puede faltar
+
     ReportsModule,
     CashoutsModule,
   ],
 })
 export class AppModule {}
-
-
-
-
-
