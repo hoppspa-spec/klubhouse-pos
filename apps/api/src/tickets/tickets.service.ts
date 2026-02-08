@@ -240,7 +240,11 @@ export class TicketsService {
     }
 
     // BAR: OPEN o CHECKOUT
-    if (ticket.kind === TicketKind.BAR && ![TicketStatus.OPEN, TicketStatus.CHECKOUT].includes(ticket.status)) {
+    if (
+      ticket.kind === TicketKind.BAR &&
+      ticket.status !== TicketStatus.OPEN &&
+      ticket.status !== TicketStatus.CHECKOUT
+    ) {
       throw new BadRequestException("Ticket no listo para cobro");
     }
 
