@@ -1,0 +1,42 @@
+{
+  "name": "klubhouse-pos-api",
+  "private": true,
+  "scripts": {
+    "dev": "node ../../node_modules/@nestjs/cli/bin/nest.js start --watch",
+    "build": "npx prisma generate --schema=../../prisma/schema.prisma && node ../../node_modules/@nestjs/cli/bin/nest.js build",
+    "start": "node dist/main.js",
+    "prisma:generate": "npx prisma generate --schema=../../prisma/schema.prisma",
+    "prisma:migrate": "npx prisma migrate deploy --schema=../../prisma/schema.prisma",
+    "prisma:seed": "npx prisma db seed --schema=../../prisma/schema.prisma"    
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/core": "^10.0.0",
+    "@nestjs/jwt": "^10.0.0",
+    "@nestjs/platform-express": "^10.0.0",
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^17.2.3",
+    "reflect-metadata": "^0.1.13",
+    "rxjs": "^7.8.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^10.0.0",
+    "@nestjs/schematics": "^10.0.0",
+    "@nestjs/testing": "^10.0.0",
+    "prisma": "^5.22.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
+  }
+}
+
+
+
+
+
+
+
+
