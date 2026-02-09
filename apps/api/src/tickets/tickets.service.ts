@@ -240,10 +240,12 @@ export class TicketsService {
     }
 
     // BAR: OPEN o CHECKOUT
-    const allowedBarStatuses: TicketStatus[] = [TicketStatus.OPEN, TicketStatus.CHECKOUT];
-    if (ticket.kind === TicketKind.BAR && !allowedBarStatuses.includes(ticket.status)) {
+    if (
+      ticket.kind === TicketKind.BAR &&
+      !([TicketStatus.OPEN, TicketStatus.CHECKOUT] as TicketStatus[]).includes(ticket.status)
+    ) {
       throw new BadRequestException("Ticket no listo para cobro");
-    }
+    }  
 
     const consumos = ticket.items.reduce((a, it) => a + Number(it.lineTotal), 0);
     const rental = ticket.kind === TicketKind.RENTAL ? Number(ticket.rentalAmount ?? 0) : 0;
