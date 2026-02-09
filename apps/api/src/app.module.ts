@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { PrismaModule } from "./prisma/prisma.module";
-import { JwtGlobalModule } from "./auth/jwt-global.module"; // ajusta si tu archivo se llama distinto
+import { JwtGlobalModule } from "./auth/jwt-global.module";
 import { AuthModule } from "./auth/auth.module";
 
 import { UsersModule } from "./users/users.module";
@@ -21,7 +21,7 @@ import { CashoutsModule } from "./cashouts/cashouts.module";
     UsersModule,
     ProductsModule,
     TicketsModule,
-    TablesModule, // ✅ NO puede faltar
+    TablesModule, // ✅ CLAVE
 
     ReportsModule,
     CashoutsModule,

@@ -5,13 +5,10 @@ import { TicketsController, TicketsPublicController } from "./tickets.controller
 import { TicketsService } from "./tickets.service";
 
 @Module({
-  imports: [
-    PrismaModule,
-    JwtModule, // si ya tienes JwtGlobalModule global, igual no molesta
-  ],
+  imports: [PrismaModule, JwtModule],
   controllers: [TicketsController, TicketsPublicController],
   providers: [TicketsService],
-  exports: [TicketsService], // ✅ para que TablesModule lo pueda inyectar
+  exports: [TicketsService], // ✅ para que TablesModule pueda inyectarlo
 })
 export class TicketsModule {}
 

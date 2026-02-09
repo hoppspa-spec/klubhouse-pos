@@ -3,7 +3,7 @@ import { TablesController } from "./tables.controller";
 import { TicketsModule } from "../tickets/tickets.module";
 
 @Module({
-  imports: [TicketsModule], // ✅ aquí entra el TicketsService exportado
+  imports: [TicketsModule], // ✅ trae TicketsService exportado
   controllers: [TablesController],
 })
 export class TablesModule {}
