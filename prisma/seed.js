@@ -1,33 +1,27 @@
-const { PrismaClient, Role } = require("@prisma/client");
-const bcrypt = require("bcryptjs");
-
+// prisma/seed.js
+const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
-async function upsertUser({ username, name, role, password }) {
-  const passwordHash = await bcrypt.hash(password, 10);
-  return prisma.user.upsert({
-    where: { username },
-    update: { name, role, passwordHash, isActive: true },
-    create: { username, name, role, passwordHash, isActive: true },
-  });
-}
-
 async function main() {
-  // MASTER + SLAVE
-  await upsertUser({ username: "master", name: "Master", role: Role.MASTER, password: "admin1234" });
-  await upsertUser({ username: "manager", name: "Manager", role: Role.SLAVE, password: "admin1234" });
+  // crea 8 mesas POOL + 1 BAR (ejemplo)
+  const tables = [
+    ...Array.from({ length: 8 }).map((_, i) => ({
+      id: i + 1,
+      name: `MESA ${i + 1}`,
+      type: "POOL",
+    })),
+    { id: 99, name: "BARRA", type: "BAR" },
+  ];
 
-  // 6 SELLERS
-  for (let i = 1; i <= 6; i++) {
-    await upsertUser({
-      username: `seller${i}`,
-      name: `Seller ${i}`,
-      role: Role.SELLER,
-      password: "seller1234",
+  for (const t of tables) {
+    await prisma.table.upsert({
+      where: { id: t.id },
+      update: { name: t.name, type: t.type },
+      create: t,
     });
   }
 
-  console.log("✅ Seed listo: master/manager + 6 sellers");
+  console.log("✅ Seed tables listo");
 }
 
 main()
