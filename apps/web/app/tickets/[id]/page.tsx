@@ -29,7 +29,6 @@ type TableState = {
 function diffMinutes(from: string, to: Date) {
   return Math.max(0, Math.floor((to.getTime() - new Date(from).getTime()) / 60000));
 }
-
 function formatDuration(minutes: number) {
   const mm = Math.max(0, Math.floor(minutes || 0));
   const h = Math.floor(mm / 60);
@@ -38,13 +37,18 @@ function formatDuration(minutes: number) {
   if (m === 0) return `${h} h`;
   return `${h} h ${m} min`;
 }
-
 const formatCLP = (n: number) =>
-  new Intl.NumberFormat("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  }).format(n || 0);
+  new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(n || 0);
+
+function labelKind(k: Ticket["kind"]) {
+  return k === "RENTAL" ? "Arriendo" : "Bar";
+}
+function pillColor(status: Ticket["status"]) {
+  if (status === "OPEN") return { bg: "rgba(245,196,0,0.14)", bd: "rgba(245,196,0,0.35)", fg: "#f5c400" };
+  if (status === "CHECKOUT") return { bg: "rgba(255,255,255,0.08)", bd: "rgba(255,255,255,0.18)", fg: "#fff" };
+  if (status === "PAID") return { bg: "rgba(0,255,128,0.10)", bd: "rgba(0,255,128,0.22)", fg: "#8cffc0" };
+  return { bg: "rgba(255,77,77,0.10)", bd: "rgba(255,77,77,0.22)", fg: "#ff4d4d" };
+}
 
 export default function TicketPage() {
   const params = useParams();
@@ -115,6 +119,7 @@ export default function TicketPage() {
   useEffect(() => {
     if (!ticket) return;
 
+    // el “tiempo” siempre live en RENTAL OPEN
     if (ticket.kind === "RENTAL" && ticket.status === "OPEN" && ticket.startedAt) {
       const tick = () => setLiveMinutes(diffMinutes(ticket.startedAt!, new Date()));
       tick();
@@ -158,9 +163,7 @@ export default function TicketPage() {
       });
 
       const url = `${API_URL}/tickets/${ticket.id}/receipt?token=${encodeURIComponent(res.receiptToken)}`;
-
       window.open(url, "_blank", "noopener,noreferrer");
-
       setTimeout(() => router.replace("/tables"), 250);
     } catch (e: any) {
       console.error(e);
@@ -218,122 +221,193 @@ export default function TicketPage() {
       .filter((t) => t?.id !== ticket.table.id); // no la misma
   }, [tables, ticket]);
 
-  if (!id) return <div style={{ color: "#fff", padding: 20 }}>Ticket inválido (sin id).</div>;
-  if (!ticket || !user) return <div style={{ color: "#fff", padding: 20 }}>Cargando…</div>;
+  if (!id) return <div style={styles.page}>Ticket inválido (sin id).</div>;
+  if (!ticket || !user) return <div style={styles.page}>Cargando…</div>;
 
-  // ✅ Gate CORRECTO
   const canCheckout =
     ticket.status !== "PAID" &&
     ticket.status !== "CANCELED" &&
     ((ticket.kind === "BAR" && (ticket.status === "OPEN" || ticket.status === "CHECKOUT")) ||
       (ticket.kind === "RENTAL" && (ticket.status === "CHECKOUT" || (isSeller && ticket.status === "OPEN"))));
 
+  const pill = pillColor(ticket.status);
+
   return (
-    <div style={{ background: "#060606", color: "#fff", minHeight: "100vh", padding: 20 }}>
-      <h2>
-        {ticket.table.name} · {ticket.kind} · {ticket.status}
-      </h2>
-
-      {err && <div style={{ marginTop: 10, color: "#ff4d4d" }}>{err}</div>}
-
-      {/* ✅ horas/min + CLP */}
-      {liveMinutes != null && ticket.kind === "RENTAL" && (
-        <div style={{ color: "#f5c400", marginTop: 8 }}>
-          ⏱ <b>{formatDuration(liveMinutes)}</b>
-          {"  ·  "}
-          Total: <b>{formatCLP(totals?.total ?? 0)}</b>
-        </div>
-      )}
-
-      <div style={{ marginTop: 12 }}>
-        TOTAL: <b>{formatCLP(totals?.total ?? 0)}</b>
-      </div>
-
-      <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <button disabled={!canCheckout || loading} onClick={() => checkout("CASH")} style={btn()}>
-          Cobrar CASH
-        </button>
-        <button disabled={!canCheckout || loading} onClick={() => checkout("DEBIT")} style={btn()}>
-          Cobrar DEBIT
-        </button>
-
-        {/* ✅ Botón cambiar mesa */}
-        <button
-          disabled={!canMoveTable || loading || moveLoading || ticket.status === "PAID" || ticket.status === "CANCELED"}
-          onClick={openMoveModal}
-          style={btnDark()}
-        >
-          Cambiar mesa
-        </button>
-      </div>
-
-      <div style={{ marginTop: 18 }}>
-        {ticket.items.map((it) => (
-          <div key={it.id} style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
-            <div style={{ flex: 1 }}>
-              {it.product.name} · {it.qty}
+    <div style={styles.page}>
+      {/* HEADER */}
+      <div style={styles.header}>
+        <div style={styles.brand}>
+          <img src="/logo-klub.png" alt="Klub House" style={styles.logo} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <div style={styles.brandTitle}>KLUB HOUSE POS</div>
+            <div style={styles.brandSub}>
+              {user?.name || user?.username || "Usuario"} · <span style={{ opacity: 0.85 }}>{role}</span>
             </div>
-            <button disabled={loading} onClick={() => add(it.productId, +1)} style={btnSmall()}>
-              +
-            </button>
-            <button disabled={loading} onClick={() => add(it.productId, -1)} style={btnSmall()}>
-              -
-            </button>
           </div>
-        ))}
-      </div>
+        </div>
 
-      <div style={{ marginTop: 18 }}>
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Agregar productos</div>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar..." style={inp()} />
-        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-          {filtered.map((p) => (
-            <button key={p.id} disabled={loading} onClick={() => add(p.id, +1)} style={card()}>
-              <div style={{ fontWeight: 900 }}>{p.name}</div>
-              <div style={{ color: "#bdbdbd", fontSize: 12 }}>
-                {p.category} · {formatCLP(p.price)} · stock {p.stock}
-              </div>
-            </button>
-          ))}
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <button onClick={() => router.replace("/tables")} style={btnGhost()} disabled={loading || moveLoading}>
+            ← Mesas
+          </button>
+
+          <div style={{ ...styles.pill, background: pill.bg, borderColor: pill.bd, color: pill.fg }}>
+            {ticket.status}
+          </div>
         </div>
       </div>
 
-      {/* ===== MODAL CAMBIAR MESA ===== */}
-      {moveOpen && (
-        <div style={overlay()}>
-          <div style={modal()}>
-            <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 10 }}>Cambiar mesa</div>
+      {/* TITLE */}
+      <div style={styles.topRow}>
+        <div>
+          <div style={styles.h1}>{ticket.table.name}</div>
+          <div style={styles.subline}>
+            {labelKind(ticket.kind)} · Tipo {ticket.table.type}
+            {ticket.kind === "RENTAL" && liveMinutes != null ? (
+              <>
+                {" "}
+                · <span style={styles.clock}>⏱ {formatDuration(liveMinutes)}</span>
+              </>
+            ) : null}
+          </div>
+        </div>
 
-            <div style={{ fontSize: 12, color: "#bdbdbd", marginBottom: 10 }}>
-              Mesa actual: <b style={{ color: "#fff" }}>{ticket.table.name}</b> · tipo{" "}
-              <b style={{ color: "#fff" }}>{ticket.table.type}</b>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <button
+            disabled={!canMoveTable || loading || moveLoading || ticket.status === "PAID" || ticket.status === "CANCELED"}
+            onClick={openMoveModal}
+            style={btnSecondary()}
+          >
+            Cambiar mesa
+          </button>
+
+          <button disabled={!canCheckout || loading} onClick={() => checkout("CASH")} style={btnPrimary()}>
+            Cobrar CASH
+          </button>
+          <button disabled={!canCheckout || loading} onClick={() => checkout("DEBIT")} style={btnPrimary()}>
+            Cobrar DEBIT
+          </button>
+        </div>
+      </div>
+
+      {err && <div style={styles.alert}>{err}</div>}
+
+      {/* SUMMARY */}
+      <div style={styles.grid3}>
+        <div style={styles.card}>
+          <div style={styles.cardLabel}>Consumos</div>
+          <div style={styles.cardValue}>{formatCLP(totals?.consumos ?? 0)}</div>
+        </div>
+
+        <div style={styles.card}>
+          <div style={styles.cardLabel}>Arriendo</div>
+          <div style={styles.cardValue}>{formatCLP(totals?.rental ?? 0)}</div>
+          <div style={styles.cardHint}>
+            {ticket.kind === "RENTAL" && ticket.status === "OPEN"
+              ? "Estimado en vivo (se actualiza solo)"
+              : ticket.kind === "RENTAL"
+              ? "Calculado"
+              : "—"}
+          </div>
+        </div>
+
+        <div style={{ ...styles.card, borderColor: "rgba(245,196,0,0.25)" }}>
+          <div style={styles.cardLabel}>Total</div>
+          <div style={{ ...styles.cardValue, color: "#f5c400" }}>{formatCLP(totals?.total ?? 0)}</div>
+          <div style={styles.cardHint}>Redondeo aplicado</div>
+        </div>
+      </div>
+
+      {/* ITEMS */}
+      <div style={styles.section}>
+        <div style={styles.sectionTitle}>Detalle</div>
+
+        <div style={styles.panel}>
+          {ticket.items.length === 0 ? (
+            <div style={styles.empty}>Sin consumos aún.</div>
+          ) : (
+            ticket.items.map((it) => (
+              <div key={it.id} style={styles.row}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={styles.rowTitle}>{it.product.name}</div>
+                  <div style={styles.rowSub}>
+                    {it.product.category} · {formatCLP(it.unitPrice)} · x{it.qty}
+                  </div>
+                </div>
+
+                <div style={styles.rowRight}>{formatCLP(it.lineTotal)}</div>
+
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button disabled={loading} onClick={() => add(it.productId, +1)} style={btnMini()}>
+                    +
+                  </button>
+                  <button disabled={loading} onClick={() => add(it.productId, -1)} style={btnMini()}>
+                    -
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* ADD PRODUCTS */}
+      <div style={styles.section}>
+        <div style={styles.sectionTitle}>Agregar productos</div>
+
+        <div style={styles.panel}>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre o categoría..." style={styles.input} />
+
+          <div style={styles.productsGrid}>
+            {filtered.map((p) => (
+              <button key={p.id} disabled={loading} onClick={() => add(p.id, +1)} style={styles.productCard}>
+                <div style={styles.productName}>{p.name}</div>
+                <div style={styles.productMeta}>
+                  {p.category} · {formatCLP(p.price)} · stock {p.stock}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* MODAL CAMBIAR MESA */}
+      {moveOpen && (
+        <div style={styles.overlay}>
+          <div style={styles.modal}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+              <div>
+                <div style={styles.modalTitle}>Cambiar mesa</div>
+                <div style={styles.modalSub}>
+                  Actual: <b style={{ color: "#fff" }}>{ticket.table.name}</b> · {ticket.table.type}
+                </div>
+              </div>
+
+              <img src="/logo-club.png" alt="Billiard Club" style={{ height: 36, opacity: 0.95 }} />
             </div>
 
-            <label style={{ display: "block", fontSize: 12, color: "#bdbdbd", marginBottom: 6 }}>Nueva mesa (libre)</label>
-            <select
-              value={toTableId ?? ""}
-              onChange={(e) => setToTableId(Number(e.target.value))}
-              style={sel()}
-              disabled={moveLoading}
-            >
-              <option value="" disabled>
-                Selecciona una mesa libre…
-              </option>
-              {freeTargets.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
+            <div style={{ marginTop: 12 }}>
+              <label style={styles.label}>Nueva mesa (libre)</label>
+              <select value={toTableId ?? ""} onChange={(e) => setToTableId(Number(e.target.value))} style={styles.select} disabled={moveLoading}>
+                <option value="" disabled>
+                  Selecciona una mesa…
                 </option>
-              ))}
-            </select>
+                {freeTargets.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
 
-            {moveErr && <div style={{ marginTop: 10, color: "#ff4d4d" }}>{moveErr}</div>}
+              {moveErr && <div style={styles.modalErr}>{moveErr}</div>}
+            </div>
 
             <div style={{ marginTop: 14, display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button disabled={moveLoading} onClick={() => setMoveOpen(false)} style={btnSmall()}>
+              <button disabled={moveLoading} onClick={() => setMoveOpen(false)} style={btnGhost()}>
                 Cancelar
               </button>
-              <button disabled={!toTableId || moveLoading} onClick={confirmMoveTable} style={btn()}>
-                Confirmar
+              <button disabled={!toTableId || moveLoading} onClick={confirmMoveTable} style={btnPrimary()}>
+                Confirmar y volver a mesas
               </button>
             </div>
           </div>
@@ -343,27 +417,208 @@ export default function TicketPage() {
   );
 }
 
-function btn(): React.CSSProperties {
-  return { padding: "10px 14px", borderRadius: 12, background: "#f5c400", color: "#000", fontWeight: 900, border: "none", cursor: "pointer" };
+/* ===== styles ===== */
+const styles: Record<string, React.CSSProperties> = {
+  page: {
+    minHeight: "100vh",
+    background: "radial-gradient(1200px 500px at 20% 0%, rgba(245,196,0,0.10), transparent 55%), #050505",
+    color: "#fff",
+    padding: 18,
+  },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "center",
+    padding: "12px 14px",
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.08)",
+    background: "rgba(10,10,10,0.72)",
+    backdropFilter: "blur(10px)",
+  },
+  brand: { display: "flex", alignItems: "center", gap: 12 },
+  logo: { height: 34, width: "auto", opacity: 0.95 },
+  brandTitle: { fontSize: 13, letterSpacing: 1.4, opacity: 0.95 },
+  brandSub: { fontSize: 12, color: "rgba(255,255,255,0.70)" },
+
+  pill: {
+    padding: "8px 10px",
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.18)",
+    fontSize: 12,
+    letterSpacing: 0.6,
+  },
+
+  topRow: {
+    marginTop: 14,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 14,
+    flexWrap: "wrap",
+  },
+  h1: { fontSize: 28, fontWeight: 750, letterSpacing: 0.2 },
+  subline: { marginTop: 4, fontSize: 13, color: "rgba(255,255,255,0.70)" },
+  clock: { color: "#f5c400" },
+
+  alert: {
+    marginTop: 12,
+    padding: "10px 12px",
+    borderRadius: 14,
+    border: "1px solid rgba(255,77,77,0.25)",
+    background: "rgba(255,77,77,0.08)",
+    color: "#ff9a9a",
+    fontSize: 13,
+  },
+
+  grid3: {
+    marginTop: 14,
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 12,
+  },
+  card: {
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.08)",
+    background: "rgba(12,12,12,0.72)",
+    padding: 14,
+  },
+  cardLabel: { fontSize: 12, color: "rgba(255,255,255,0.65)", letterSpacing: 0.6 },
+  cardValue: { marginTop: 6, fontSize: 22, fontWeight: 720 },
+  cardHint: { marginTop: 6, fontSize: 12, color: "rgba(255,255,255,0.55)" },
+
+  section: { marginTop: 14 },
+  sectionTitle: { fontSize: 14, letterSpacing: 0.8, opacity: 0.9, marginBottom: 10 },
+  panel: {
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.08)",
+    background: "rgba(10,10,10,0.72)",
+    padding: 12,
+  },
+  empty: { padding: 10, color: "rgba(255,255,255,0.55)", fontSize: 13 },
+
+  row: {
+    display: "flex",
+    gap: 12,
+    alignItems: "center",
+    padding: "10px 8px",
+    borderBottom: "1px solid rgba(255,255,255,0.06)",
+  },
+  rowTitle: { fontSize: 14, fontWeight: 650, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  rowSub: { marginTop: 2, fontSize: 12, color: "rgba(255,255,255,0.60)" },
+  rowRight: { minWidth: 110, textAlign: "right", fontSize: 13, color: "rgba(255,255,255,0.85)" },
+
+  input: {
+    width: "100%",
+    padding: "11px 12px",
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(0,0,0,0.25)",
+    color: "#fff",
+    outline: "none",
+    fontSize: 13,
+  },
+  productsGrid: {
+    marginTop: 12,
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 10,
+  },
+  productCard: {
+    textAlign: "left",
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.08)",
+    background: "rgba(14,14,14,0.85)",
+    padding: 12,
+    cursor: "pointer",
+  },
+  productName: { fontSize: 14, fontWeight: 700 },
+  productMeta: { marginTop: 4, fontSize: 12, color: "rgba(255,255,255,0.62)" },
+
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.70)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    zIndex: 50,
+  },
+  modal: {
+    width: "100%",
+    maxWidth: 520,
+    borderRadius: 18,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(10,10,10,0.92)",
+    padding: 14,
+    boxShadow: "0 12px 40px rgba(0,0,0,0.55)",
+  },
+  modalTitle: { fontSize: 18, fontWeight: 760 },
+  modalSub: { marginTop: 4, fontSize: 12, color: "rgba(255,255,255,0.60)" },
+  label: { display: "block", fontSize: 12, color: "rgba(255,255,255,0.65)", marginBottom: 6 },
+  select: {
+    width: "100%",
+    padding: "11px 12px",
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(0,0,0,0.25)",
+    color: "#fff",
+    outline: "none",
+    fontSize: 13,
+  },
+  modalErr: {
+    marginTop: 10,
+    padding: "10px 12px",
+    borderRadius: 14,
+    border: "1px solid rgba(255,77,77,0.25)",
+    background: "rgba(255,77,77,0.08)",
+    color: "#ff9a9a",
+    fontSize: 13,
+  },
+};
+
+function btnPrimary(): React.CSSProperties {
+  return {
+    padding: "11px 14px",
+    borderRadius: 14,
+    background: "#f5c400",
+    color: "#000",
+    fontWeight: 800,
+    border: "1px solid rgba(0,0,0,0.25)",
+    cursor: "pointer",
+  };
 }
-function btnDark(): React.CSSProperties {
-  return { padding: "10px 14px", borderRadius: 12, background: "#111", color: "#fff", fontWeight: 900, border: "1px solid #333", cursor: "pointer" };
+function btnSecondary(): React.CSSProperties {
+  return {
+    padding: "11px 14px",
+    borderRadius: 14,
+    background: "rgba(255,255,255,0.05)",
+    color: "#fff",
+    fontWeight: 650,
+    border: "1px solid rgba(255,255,255,0.12)",
+    cursor: "pointer",
+  };
 }
-function btnSmall(): React.CSSProperties {
-  return { padding: "6px 10px", borderRadius: 10, background: "#111", color: "#fff", fontWeight: 900, border: "1px solid #333", cursor: "pointer" };
+function btnGhost(): React.CSSProperties {
+  return {
+    padding: "10px 12px",
+    borderRadius: 14,
+    background: "transparent",
+    color: "rgba(255,255,255,0.85)",
+    fontWeight: 650,
+    border: "1px solid rgba(255,255,255,0.10)",
+    cursor: "pointer",
+  };
 }
-function inp(): React.CSSProperties {
-  return { width: "100%", padding: "10px 12px", borderRadius: 12, border: "1px solid #333", background: "#111", color: "#fff", outline: "none" };
-}
-function sel(): React.CSSProperties {
-  return { width: "100%", padding: "10px 12px", borderRadius: 12, border: "1px solid #333", background: "#111", color: "#fff", outline: "none" };
-}
-function card(): React.CSSProperties {
-  return { textAlign: "left", border: "1px solid #222", background: "#0d0d0d", color: "#fff", borderRadius: 12, padding: 12, cursor: "pointer" };
-}
-function overlay(): React.CSSProperties {
-  return { position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 50 };
-}
-function modal(): React.CSSProperties {
-  return { width: "100%", maxWidth: 420, borderRadius: 14, border: "1px solid #222", background: "#0b0b0b", color: "#fff", padding: 14 };
+function btnMini(): React.CSSProperties {
+  return {
+    padding: "8px 10px",
+    borderRadius: 12,
+    background: "rgba(255,255,255,0.05)",
+    color: "#fff",
+    fontWeight: 800,
+    border: "1px solid rgba(255,255,255,0.10)",
+    cursor: "pointer",
+  };
 }
