@@ -163,7 +163,7 @@ export class TicketsService {
   }
 
   // =========================
-  // TOTALS
+  // TOTALS (con rental preview en OPEN)
   // =========================
   async getTicketWithTotals(id: string) {
     const ticket = await this.prisma.ticket.findUnique({
@@ -173,8 +173,23 @@ export class TicketsService {
     if (!ticket) throw new NotFoundException("Ticket no existe");
 
     const consumos = ticket.items.reduce((a, i) => a + Number(i.lineTotal), 0);
-    const rental = Number(ticket.rentalAmount ?? 0);
-    return { ticket, totals: { consumos, rental, total: consumos + rental } };
+    let rental = 0;
+    if (ticket.kind === TicketKind.RENTAL) {
+      // si ya está calculado (close/checkout), úsalo
+      if (ticket.rentalAmount != null) {
+        rental = Number(ticket.rentalAmount);
+     } else {
+       // ✅ preview en vivo cuando está OPEN
+       if (ticket.status === TicketStatus.OPEN && ticket.startedAt) {
+         const now = new Date();
+         const minutes = calcMinutes(ticket.startedAt, now);
+         rental = calcRental(minutes, now);
+       }
+     }
+   }
+   const total = roundUp100(consumos + rental);
+
+   return { ticket, totals: { consumos, rental, total } };
   }
 
   // =========================
