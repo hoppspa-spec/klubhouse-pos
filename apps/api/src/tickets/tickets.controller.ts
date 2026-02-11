@@ -23,6 +23,15 @@ export class TicketsController {
     return this.svc.addItem(id, body.productId, body.qtyDelta);
   }
 
+  // ✅ mover ticket de mesa (arrastra consumos + tiempo)
+  // Reglas: misma "type" (POOL->POOL / BAR->BAR), y mesa destino debe estar libre
+  @Post("tickets/:id/move")
+  @Roles(Role.MASTER, Role.SLAVE, Role.SELLER) // todos pueden mover mesa + consumo
+  move(@Param("id") id: string, @Body() body: { toTableId: number }) {
+   return this.svc.moveTicket(id, body.toTableId);
+}
+
+
   // ✅ SOLO MANAGER/ADMIN (manual)
   @Post("tickets/:id/close")
   @Roles(Role.MASTER, Role.SLAVE)
