@@ -1,145 +1,132 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { PaymentMethod } from "@prisma/client";
 
-type Method = "CASH" | "DEBIT";
+type Preview = {
+  from: Date;
+  to: Date;
+  orders: number;
+  totalCash: number;
+  totalDebit: number;
+  total: number;
+};
+
+function startOfDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function toCSV(rows: any[]) {
+  const header = ["id", "userId", "from", "to", "orders", "totalCash", "totalDebit", "total", "createdAt"];
+  const esc = (v: any) => {
+    const s = String(v ?? "");
+    if (s.includes('"') || s.includes(",") || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+  return [header.join(","), ...rows.map((r) => header.map((k) => esc(r[k])).join(","))].join("\n");
+}
 
 @Injectable()
 export class CashoutsService {
   constructor(private prisma: PrismaService) {}
 
-  private dayRangeUTC(now = new Date()) {
-    const from = new Date(now);
-    from.setHours(0, 0, 0, 0);
-
-    const to = new Date(now);
-    to.setHours(23, 59, 59, 999);
-
-    return { from, to };
-  }
-
-  private parseRange(from?: string, to?: string) {
-    const f = from ? new Date(from) : null;
-    const t = to ? new Date(to) : null;
-
-    const fromDate = f && !isNaN(f.getTime()) ? f : new Date(0);
-    const toDate = t && !isNaN(t.getTime()) ? t : new Date();
-
-    return { fromDate, toDate };
-  }
-
-  private summarize(payments: Array<{ method: Method; totalAmount: number }>) {
-    const cash = payments.filter(p => p.method === "CASH").reduce((a, p) => a + Number(p.totalAmount || 0), 0);
-    const debit = payments.filter(p => p.method === "DEBIT").reduce((a, p) => a + Number(p.totalAmount || 0), 0);
-    const total = payments.reduce((a, p) => a + Number(p.totalAmount || 0), 0);
-    return { count: payments.length, cash, debit, total };
-  }
-
-  // ✅ preview para el usuario (hoy)
-  async previewForUser(userId: string) {
-    const { from, to } = this.dayRangeUTC();
-    const payments = await this.prisma.payment.findMany({
-      where: { paidById: userId, paidAt: { gte: from, lte: to } },
-      select: { method: true, totalAmount: true, paidAt: true, receiptNumber: true, ticketId: true },
-      orderBy: { paidAt: "desc" },
+  // último cierre del usuario
+  async getLastForUser(userId: string) {
+    return this.prisma.cashout.findFirst({
+      where: { userId },
+      orderBy: { to: "desc" },
     });
-
-    const sum = this.summarize(payments as any);
-
-    return {
-      ok: true,
-      userId,
-      from: from.toISOString(),
-      to: to.toISOString(),
-      ...sum,
-    };
   }
 
-  // ✅ close para el usuario (V1 = mismo resumen; si después creas tabla Cashout, aquí se guarda)
-  async closeForUser(userId: string) {
-    // V1: misma lógica que preview (sin persistencia)
-    const out = await this.previewForUser(userId);
-    return { ...out, closed: true };
-  }
+  // Calcula el rango "desde último cierre" -> ahora
+  async previewForUser(userId: string): Promise<Preview> {
+    const now = new Date();
 
-  // ✅ listado global (manager/admin): detalle de pagos en rango
-  async list(from?: string, to?: string) {
-    const { fromDate, toDate } = this.parseRange(from, to);
+    const last = await this.getLastForUser(userId);
+    const from = last?.to ? new Date(last.to) : startOfDay(now);
+    const to = now;
 
-    const rows = await this.prisma.payment.findMany({
-      where: { paidAt: { gte: fromDate, lte: toDate } },
-      select: {
-        paidAt: true,
-        receiptNumber: true,
-        method: true,
-        totalAmount: true,
-        ticketId: true,
-        ticket: {
-          select: {
-            kind: true,
-            table: { select: { name: true } },
-            openedBy: { select: { name: true, username: true } },
-          },
-        },
+    if (to <= from) {
+      throw new BadRequestException("Rango inválido para cierre");
+    }
+
+    const pays = await this.prisma.payment.findMany({
+      where: {
+        paidById: userId,
+        paidAt: { gte: from, lt: to },
       },
-      orderBy: { paidAt: "desc" },
+      select: { method: true, totalAmount: true },
     });
 
-    const mapped = rows.map((r) => ({
-      paidAt: r.paidAt.toISOString(),
-      receiptNumber: r.receiptNumber,
-      method: r.method as any,
-      totalAmount: Number(r.totalAmount || 0),
-      ticketId: r.ticketId,
-      kind: r.ticket?.kind ?? undefined,
-      tableName: r.ticket?.table?.name ?? undefined,
-      sellerName: r.ticket?.openedBy?.name || r.ticket?.openedBy?.username || undefined,
-    }));
+    let totalCash = 0;
+    let totalDebit = 0;
 
-    const sum = this.summarize(mapped as any);
+    for (const p of pays) {
+      const amt = Number(p.totalAmount || 0);
+      if (p.method === (PaymentMethod as any).CASH || p.method === ("CASH" as any)) totalCash += amt;
+      if (p.method === (PaymentMethod as any).DEBIT || p.method === ("DEBIT" as any)) totalDebit += amt;
+    }
 
-    return {
-      ok: true,
-      from: fromDate.toISOString(),
-      to: toDate.toISOString(),
-      ...sum,
-      rows: mapped,
-    };
+    const orders = pays.length;
+    const total = totalCash + totalDebit;
+
+    return { from, to, orders, totalCash, totalDebit, total };
   }
 
-  // ✅ CSV global
+  async closeForUser(userId: string) {
+    const prev = await this.previewForUser(userId);
+
+    // anti-doble-click: si ya existe un cierre con mismo "to" muy cercano, frena
+    const last = await this.getLastForUser(userId);
+    if (last?.to && new Date(last.to).getTime() >= prev.to.getTime() - 5_000) {
+      throw new BadRequestException("Ya cerraste hace muy poco (evitar doble cierre).");
+    }
+
+    const created = await this.prisma.cashout.create({
+      data: {
+        userId,
+        from: prev.from,
+        to: prev.to,
+        orders: prev.orders,
+        totalCash: prev.totalCash,
+        totalDebit: prev.totalDebit,
+        total: prev.total,
+      },
+    });
+
+    return { ok: true, cashout: created };
+  }
+
+  // admin/manager list por rango (por createdAt o por to; aquí uso to)
+  async list(from?: string, to?: string) {
+    const where: any = {};
+    if (from || to) {
+      where.to = {};
+      if (from) where.to.gte = new Date(from);
+      if (to) where.to.lte = new Date(to);
+    }
+
+    return this.prisma.cashout.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: { user: { select: { id: true, username: true, name: true, role: true } } },
+    });
+  }
+
   async csv(from?: string, to?: string) {
-    const data = await this.list(from, to);
-
-    const header = [
-      "paidAt",
-      "receiptNumber",
-      "method",
-      "totalAmount",
-      "ticketId",
-      "kind",
-      "tableName",
-      "sellerName",
-    ].join(",");
-
-    const lines = (data.rows || []).map((r: any) => [
-      safeCsv(r.paidAt),
-      safeCsv(r.receiptNumber),
-      safeCsv(r.method),
-      safeCsv(r.totalAmount),
-      safeCsv(r.ticketId),
-      safeCsv(r.kind),
-      safeCsv(r.tableName),
-      safeCsv(r.sellerName),
-    ].join(","));
-
-    return [header, ...lines].join("\n");
+    const rows = await this.list(from, to);
+    const flat = rows.map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      from: r.from.toISOString(),
+      to: r.to.toISOString(),
+      orders: r.orders,
+      totalCash: r.totalCash,
+      totalDebit: r.totalDebit,
+      total: r.total,
+      createdAt: r.createdAt.toISOString(),
+    }));
+    return toCSV(flat);
   }
-}
-
-function safeCsv(v: any) {
-  if (v === null || v === undefined) return "";
-  const s = String(v);
-  // si tiene coma/quotes/salto, escapamos
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
 }
