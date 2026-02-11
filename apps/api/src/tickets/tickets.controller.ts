@@ -29,8 +29,7 @@ export class TicketsController {
   @Roles(Role.MASTER, Role.SLAVE, Role.SELLER) // todos pueden mover mesa + consumo
   move(@Param("id") id: string, @Body() body: { toTableId: number }) {
    return this.svc.moveTicket(id, body.toTableId);
-}
-
+  }
 
   // ✅ SOLO MANAGER/ADMIN (manual)
   @Post("tickets/:id/close")
