@@ -1,3 +1,5 @@
+// apps/api/src/tickets/tickets.service.ts
+
 import {
   BadRequestException,
   Injectable,
@@ -176,7 +178,8 @@ export class TicketsService {
   }
 
   // =========================
-  // CLOSE RENTAL (manual: controller limita a MASTER/SLAVE)
+  // CLOSE RENTAL (manual)
+  // Controller controla Roles
   // =========================
   async closeRental(ticketId: string) {
     const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
@@ -211,29 +214,29 @@ export class TicketsService {
 
     if (!ticket) throw new NotFoundException("Ticket no existe");
     if (ticket.status === TicketStatus.PAID) throw new BadRequestException("Ticket ya pagado");
-    if (ticket.status === TicketStatus.CANCELED) throw new BadRequestException("Ticket cancelado");
 
-    // RENTAL: seller puede cobrar en OPEN => auto-cierra
+    // RENTAL: seller puede cobrar en OPEN => auto-cierra con endedAt local y tarifa nocturna
     if (ticket.kind === TicketKind.RENTAL) {
       if (ticket.status === TicketStatus.OPEN) {
-        if (role !== Role.SELLER) {
+        if (role === Role.SELLER) {
+          if (!ticket.startedAt) throw new BadRequestException("Ticket sin inicio");
+
+          const endedAt = new Date();
+          const minutes = calcMinutes(ticket.startedAt, endedAt);
+          const rental = calcRental(minutes, endedAt);
+
+          await this.prisma.ticket.update({
+            where: { id: ticket.id },
+            data: { endedAt, minutesPlayed: minutes, rentalAmount: rental, status: TicketStatus.CHECKOUT },
+          });
+
+          // sync para el cálculo del total abajo
+          ticket.status = TicketStatus.CHECKOUT;
+          ticket.minutesPlayed = minutes;
+          ticket.rentalAmount = rental;
+        } else {
           throw new BadRequestException("Debes cerrar arriendo antes de cobrar");
         }
-        if (!ticket.startedAt) throw new BadRequestException("Ticket sin inicio");
-
-        const endedAt = new Date();
-        const minutes = calcMinutes(ticket.startedAt, endedAt);
-        const rental = calcRental(minutes, endedAt);
-
-        await this.prisma.ticket.update({
-          where: { id: ticket.id },
-          data: { endedAt, minutesPlayed: minutes, rentalAmount: rental, status: TicketStatus.CHECKOUT },
-        });
-
-        // reflejar en memoria para el cálculo total abajo
-        ticket.status = TicketStatus.CHECKOUT;
-        ticket.minutesPlayed = minutes;
-        ticket.rentalAmount = rental;
       }
 
       if (ticket.status !== TicketStatus.CHECKOUT) {
@@ -241,11 +244,13 @@ export class TicketsService {
       }
     }
 
-    // BAR: solo OPEN o CHECKOUT
-    if (ticket.kind === TicketKind.BAR) {
-      if (ticket.status !== TicketStatus.OPEN && ticket.status !== TicketStatus.CHECKOUT) {
-        throw new BadRequestException("Ticket no listo para cobro");
-      }
+    // BAR: OPEN o CHECKOUT
+    if (
+      ticket.kind === TicketKind.BAR &&
+      ticket.status !== TicketStatus.OPEN &&
+      ticket.status !== TicketStatus.CHECKOUT
+    ) {
+      throw new BadRequestException("Ticket no listo para cobro");
     }
 
     const consumos = ticket.items.reduce((a, it) => a + Number(it.lineTotal), 0);
@@ -253,9 +258,7 @@ export class TicketsService {
     const total = roundUp100(consumos + rental);
 
     for (const it of ticket.items) {
-      if (it.product.stock < it.qty) {
-        throw new BadRequestException(`Stock insuficiente: ${it.product.name}`);
-      }
+      if (it.product.stock < it.qty) throw new BadRequestException(`Stock insuficiente: ${it.product.name}`);
     }
 
     const payment = await this.prisma.$transaction(async (tx) => {
@@ -285,11 +288,7 @@ export class TicketsService {
         },
       });
 
-      await tx.ticket.update({
-        where: { id: ticket.id },
-        data: { status: TicketStatus.PAID },
-      });
-
+      await tx.ticket.update({ where: { id: ticket.id }, data: { status: TicketStatus.PAID } });
       return p;
     });
 
@@ -302,10 +301,12 @@ export class TicketsService {
   }
 
   // =========================
-  // MOVE (arrastra TODO)
+  // MOVE (arrastra todo)
   // =========================
   async moveTicket(ticketId: string, toTableId: number) {
-    if (!Number.isInteger(toTableId)) throw new BadRequestException("toTableId inválido");
+    if (!toTableId || !Number.isInteger(toTableId)) {
+      throw new BadRequestException("toTableId inválido");
+    }
 
     const ticket = await this.prisma.ticket.findUnique({
       where: { id: ticketId },
@@ -318,10 +319,12 @@ export class TicketsService {
     const toTable = await this.prisma.table.findUnique({ where: { id: toTableId } });
     if (!toTable) throw new NotFoundException("Mesa destino no existe");
 
+    // misma familia (POOL/BAR)
     if (toTable.type !== ticket.table.type) {
       throw new BadRequestException("No puedes mover entre tipos distintos (POOL/BAR)");
     }
 
+    // destino debe estar libre
     const existing = await this.prisma.ticket.findFirst({
       where: { tableId: toTableId, status: { in: [TicketStatus.OPEN, TicketStatus.CHECKOUT] } },
       select: { id: true },

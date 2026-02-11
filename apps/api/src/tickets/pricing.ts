@@ -1,35 +1,45 @@
-export const RATE_PER_HOUR = 3800;
-export const MINIMUM_30 = 1900;
+// apps/api/src/tickets/pricing.ts
 
-export function roundUp100(x: number) {
+export function calcMinutes(startedAt: Date, endedAt: Date) {
+  const ms = endedAt.getTime() - startedAt.getTime();
+  return Math.max(0, Math.floor(ms / 60000));
+}
+
+// Redondeo a $100 hacia arriba (como ya venías usando)
+export function roundUp100(n: number) {
+  const x = Number(n) || 0;
   return Math.ceil(x / 100) * 100;
 }
 
-export function calcMinutes(startedAt: Date, endedAt: Date) {
-  const diffMs = Math.max(0, endedAt.getTime() - startedAt.getTime());
-  return Math.floor(diffMs / 60000);
+/**
+ * Arriendo:
+ * - Base: $3.800 por hora
+ * - Nocturno: $4.800 por hora desde 00:00 hasta 06:00 (Chile)
+ * - Se cobra por hora proporcional (por minuto), y al final redondeo a 100 (opcional aquí o en total)
+ */
+export function calcRental(minutes: number, endedAt: Date) {
+  const m = Math.max(0, Number(minutes) || 0);
+
+  // Hora local de Chile, sin depender del TZ del servidor
+  const hourCL = getChileHour(endedAt);
+
+  const isNight = hourCL >= 0 && hourCL < 6; // 00:00–05:59
+  const ratePerHour = isNight ? 4800 : 3800;
+
+  const raw = (ratePerHour * m) / 60;
+
+  // puedes redondear acá o solo en total final.
+  return roundUp100(raw);
 }
 
-const RATE_DAY = 3800;
-const RATE_NIGHT = 4800;
-
-// Chile timezone (America/Santiago)
 function getChileHour(d: Date) {
-  const parts = new Intl.DateTimeFormat("en-US", {
+  // "hour: '2-digit'" => "00".."23"
+  const hh = new Intl.DateTimeFormat("en-GB", {
     timeZone: "America/Santiago",
     hour: "2-digit",
     hour12: false,
-  }).formatToParts(d);
+  }).format(d);
 
-  const hh = parts.find((p) => p.type === "hour")?.value ?? "00";
-  return Number(hh);
+  const n = Number(hh);
+  return Number.isFinite(n) ? n : d.getHours();
 }
-
-// ✅ V1 simple: decide tarifa por la hora de "endedAt" (momento de cobro/cierre)
-export function calcRental(minutes: number, endedAt: Date = new Date()) {
-  const hours = Math.max(1, Math.ceil(minutes / 60));
-  const h = getChileHour(endedAt);
-  const rate = h >= 0 && h < 6 ? RATE_NIGHT : RATE_DAY;
-  return hours * rate;
-}
-
