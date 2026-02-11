@@ -19,12 +19,8 @@ type Ticket = {
   rentalAmount?: number | null;
 };
 
-type TableState = {
-  id: number;
-  name: string;
-  type: "POOL" | "BAR";
-  ticket: any | null;
-};
+type TableState = { id: number; name: string; type: "POOL" | "BAR"; ticket: any | null };
+type PayMethod = "CASH" | "DEBIT";
 
 function diffMinutes(from: string, to: Date) {
   return Math.max(0, Math.floor((to.getTime() - new Date(from).getTime()) / 60000));
@@ -50,10 +46,22 @@ function pillColor(status: Ticket["status"]) {
   return { bg: "rgba(255,77,77,0.10)", bd: "rgba(255,77,77,0.22)", fg: "#ff4d4d" };
 }
 
+function useIsNarrow(breakpoint = 820) {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const on = () => setNarrow(window.innerWidth < breakpoint);
+    on();
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, [breakpoint]);
+  return narrow;
+}
+
 export default function TicketPage() {
   const params = useParams();
   const id = (params as any)?.id as string | undefined;
   const router = useRouter();
+  const isNarrow = useIsNarrow(820);
 
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [totals, setTotals] = useState<{ consumos: number; rental: number; total: number } | null>(null);
@@ -71,6 +79,9 @@ export default function TicketPage() {
   const [toTableId, setToTableId] = useState<number | null>(null);
   const [moveErr, setMoveErr] = useState<string | null>(null);
   const [moveLoading, setMoveLoading] = useState(false);
+
+  // ====== PAY METHOD (clean UI) ======
+  const [payMethod, setPayMethod] = useState<PayMethod>("CASH");
 
   useEffect(() => {
     try {
@@ -119,7 +130,6 @@ export default function TicketPage() {
   useEffect(() => {
     if (!ticket) return;
 
-    // el “tiempo” siempre live en RENTAL OPEN
     if (ticket.kind === "RENTAL" && ticket.status === "OPEN" && ticket.startedAt) {
       const tick = () => setLiveMinutes(diffMinutes(ticket.startedAt!, new Date()));
       tick();
@@ -136,10 +146,7 @@ export default function TicketPage() {
     setErr(null);
 
     try {
-      await api(`/tickets/${ticket.id}/items`, {
-        method: "POST",
-        body: JSON.stringify({ productId, qtyDelta }),
-      });
+      await api(`/tickets/${ticket.id}/items`, { method: "POST", body: JSON.stringify({ productId, qtyDelta }) });
       await load();
     } catch (e: any) {
       console.error(e);
@@ -149,7 +156,7 @@ export default function TicketPage() {
     }
   }
 
-  async function checkout(method: "CASH" | "DEBIT") {
+  async function checkout(method: PayMethod) {
     if (!ticket) return;
     if (loading) return;
 
@@ -196,13 +203,8 @@ export default function TicketPage() {
       setMoveLoading(true);
       setMoveErr(null);
 
-      // ✅ ruta correcta backend
-      await api(`/tickets/${ticket.id}/move`, {
-        method: "POST",
-        body: JSON.stringify({ toTableId }),
-      });
+      await api(`/tickets/${ticket.id}/move`, { method: "POST", body: JSON.stringify({ toTableId }) });
 
-      // ✅ directo a mesas
       setMoveOpen(false);
       router.replace("/tables");
     } catch (e: any) {
@@ -216,9 +218,9 @@ export default function TicketPage() {
   const freeTargets = useMemo(() => {
     if (!ticket) return [];
     return (tables || [])
-      .filter((t) => !t?.ticket) // libres
-      .filter((t) => t?.type === ticket.table.type) // mismo tipo
-      .filter((t) => t?.id !== ticket.table.id); // no la misma
+      .filter((t) => !t?.ticket)
+      .filter((t) => t?.type === ticket.table.type)
+      .filter((t) => t?.id !== ticket.table.id);
   }, [tables, ticket]);
 
   if (!id) return <div style={styles.page}>Ticket inválido (sin id).</div>;
@@ -231,6 +233,9 @@ export default function TicketPage() {
       (ticket.kind === "RENTAL" && (ticket.status === "CHECKOUT" || (isSeller && ticket.status === "OPEN"))));
 
   const pill = pillColor(ticket.status);
+
+  const grid3Cols = isNarrow ? "repeat(1, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))";
+  const prodCols = isNarrow ? "repeat(1, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))";
 
   return (
     <div style={styles.page}>
@@ -251,15 +256,13 @@ export default function TicketPage() {
             ← Mesas
           </button>
 
-          <div style={{ ...styles.pill, background: pill.bg, borderColor: pill.bd, color: pill.fg }}>
-            {ticket.status}
-          </div>
+          <div style={{ ...styles.pill, background: pill.bg, borderColor: pill.bd, color: pill.fg }}>{ticket.status}</div>
         </div>
       </div>
 
-      {/* TITLE */}
-      <div style={styles.topRow}>
-        <div>
+      {/* TITLE + ACTIONS */}
+      <div style={{ ...styles.topRow, alignItems: isNarrow ? "stretch" : "flex-end" }}>
+        <div style={{ flex: 1, minWidth: 260 }}>
           <div style={styles.h1}>{ticket.table.name}</div>
           <div style={styles.subline}>
             {labelKind(ticket.kind)} · Tipo {ticket.table.type}
@@ -272,28 +275,52 @@ export default function TicketPage() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <button
-            disabled={!canMoveTable || loading || moveLoading || ticket.status === "PAID" || ticket.status === "CANCELED"}
-            onClick={openMoveModal}
-            style={btnSecondary()}
-          >
-            Cambiar mesa
-          </button>
+        <div style={{ display: "grid", gap: 10, justifyItems: "end", width: isNarrow ? "100%" : "auto" }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: isNarrow ? "stretch" : "flex-end", width: "100%" }}>
+            <button
+              disabled={!canMoveTable || loading || moveLoading || ticket.status === "PAID" || ticket.status === "CANCELED"}
+              onClick={openMoveModal}
+              style={{ ...btnSecondary(), width: isNarrow ? "100%" : "auto" }}
+            >
+              Cambiar mesa
+            </button>
+          </div>
 
-          <button disabled={!canCheckout || loading} onClick={() => checkout("CASH")} style={btnPrimary()}>
-            Cobrar CASH
-          </button>
-          <button disabled={!canCheckout || loading} onClick={() => checkout("DEBIT")} style={btnPrimary()}>
-            Cobrar DEBIT
-          </button>
+          {/* Cobro limpio: selector + botón */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isNarrow ? "1fr" : "160px 1fr",
+              gap: 10,
+              width: "100%",
+              alignItems: "center",
+            }}
+          >
+            <select
+              value={payMethod}
+              onChange={(e) => setPayMethod(e.target.value as PayMethod)}
+              style={styles.selectInline}
+              disabled={!canCheckout || loading}
+            >
+              <option value="CASH">CASH</option>
+              <option value="DEBIT">DEBIT</option>
+            </select>
+
+            <button
+              disabled={!canCheckout || loading}
+              onClick={() => checkout(payMethod)}
+              style={{ ...btnPrimary(), width: "100%" }}
+            >
+              Cobrar
+            </button>
+          </div>
         </div>
       </div>
 
       {err && <div style={styles.alert}>{err}</div>}
 
       {/* SUMMARY */}
-      <div style={styles.grid3}>
+      <div style={{ ...styles.grid3, gridTemplateColumns: grid3Cols }}>
         <div style={styles.card}>
           <div style={styles.cardLabel}>Consumos</div>
           <div style={styles.cardValue}>{formatCLP(totals?.consumos ?? 0)}</div>
@@ -303,11 +330,7 @@ export default function TicketPage() {
           <div style={styles.cardLabel}>Arriendo</div>
           <div style={styles.cardValue}>{formatCLP(totals?.rental ?? 0)}</div>
           <div style={styles.cardHint}>
-            {ticket.kind === "RENTAL" && ticket.status === "OPEN"
-              ? "Estimado en vivo (se actualiza solo)"
-              : ticket.kind === "RENTAL"
-              ? "Calculado"
-              : "—"}
+            {ticket.kind === "RENTAL" && ticket.status === "OPEN" ? "Estimado en vivo (se actualiza solo)" : ticket.kind === "RENTAL" ? "Calculado" : "—"}
           </div>
         </div>
 
@@ -326,8 +349,16 @@ export default function TicketPage() {
           {ticket.items.length === 0 ? (
             <div style={styles.empty}>Sin consumos aún.</div>
           ) : (
-            ticket.items.map((it) => (
-              <div key={it.id} style={styles.row}>
+            ticket.items.map((it, idx) => (
+              <div
+                key={it.id}
+                style={{
+                  ...styles.row,
+                  borderBottom: idx === ticket.items.length - 1 ? "none" : "1px solid rgba(255,255,255,0.06)",
+                  flexDirection: isNarrow ? "column" : "row",
+                  alignItems: isNarrow ? "stretch" : "center",
+                }}
+              >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={styles.rowTitle}>{it.product.name}</div>
                   <div style={styles.rowSub}>
@@ -335,9 +366,9 @@ export default function TicketPage() {
                   </div>
                 </div>
 
-                <div style={styles.rowRight}>{formatCLP(it.lineTotal)}</div>
+                <div style={{ ...styles.rowRight, textAlign: isNarrow ? "left" : "right" }}>{formatCLP(it.lineTotal)}</div>
 
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, justifyContent: isNarrow ? "flex-start" : "flex-end" }}>
                   <button disabled={loading} onClick={() => add(it.productId, +1)} style={btnMini()}>
                     +
                   </button>
@@ -358,7 +389,7 @@ export default function TicketPage() {
         <div style={styles.panel}>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre o categoría..." style={styles.input} />
 
-          <div style={styles.productsGrid}>
+          <div style={{ ...styles.productsGrid, gridTemplateColumns: prodCols }}>
             {filtered.map((p) => (
               <button key={p.id} disabled={loading} onClick={() => add(p.id, +1)} style={styles.productCard}>
                 <div style={styles.productName}>{p.name}</div>
@@ -383,7 +414,7 @@ export default function TicketPage() {
                 </div>
               </div>
 
-              <img src="/logo-club.png" alt="Billiard Club" style={{ height: 36, opacity: 0.95 }} />
+              <img src="/logo-club.png" alt="Billiard Club" style={{ height: 34, opacity: 0.95 }} />
             </div>
 
             <div style={{ marginTop: 12 }}>
@@ -402,7 +433,7 @@ export default function TicketPage() {
               {moveErr && <div style={styles.modalErr}>{moveErr}</div>}
             </div>
 
-            <div style={{ marginTop: 14, display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <div style={{ marginTop: 14, display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
               <button disabled={moveLoading} onClick={() => setMoveOpen(false)} style={btnGhost()}>
                 Cancelar
               </button>
@@ -435,28 +466,16 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid rgba(255,255,255,0.08)",
     background: "rgba(10,10,10,0.72)",
     backdropFilter: "blur(10px)",
+    flexWrap: "wrap",
   },
   brand: { display: "flex", alignItems: "center", gap: 12 },
   logo: { height: 34, width: "auto", opacity: 0.95 },
   brandTitle: { fontSize: 13, letterSpacing: 1.4, opacity: 0.95 },
   brandSub: { fontSize: 12, color: "rgba(255,255,255,0.70)" },
 
-  pill: {
-    padding: "8px 10px",
-    borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.18)",
-    fontSize: 12,
-    letterSpacing: 0.6,
-  },
+  pill: { padding: "8px 10px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.18)", fontSize: 12, letterSpacing: 0.6 },
 
-  topRow: {
-    marginTop: 14,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    gap: 14,
-    flexWrap: "wrap",
-  },
+  topRow: { marginTop: 14, display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap" },
   h1: { fontSize: 28, fontWeight: 750, letterSpacing: 0.2 },
   subline: { marginTop: 4, fontSize: 13, color: "rgba(255,255,255,0.70)" },
   clock: { color: "#f5c400" },
@@ -471,42 +490,21 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
   },
 
-  grid3: {
-    marginTop: 14,
-    display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-    gap: 12,
-  },
-  card: {
-    borderRadius: 16,
-    border: "1px solid rgba(255,255,255,0.08)",
-    background: "rgba(12,12,12,0.72)",
-    padding: 14,
-  },
+  grid3: { marginTop: 14, display: "grid", gap: 12 },
+  card: { borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(12,12,12,0.72)", padding: 14 },
   cardLabel: { fontSize: 12, color: "rgba(255,255,255,0.65)", letterSpacing: 0.6 },
   cardValue: { marginTop: 6, fontSize: 22, fontWeight: 720 },
   cardHint: { marginTop: 6, fontSize: 12, color: "rgba(255,255,255,0.55)" },
 
   section: { marginTop: 14 },
   sectionTitle: { fontSize: 14, letterSpacing: 0.8, opacity: 0.9, marginBottom: 10 },
-  panel: {
-    borderRadius: 16,
-    border: "1px solid rgba(255,255,255,0.08)",
-    background: "rgba(10,10,10,0.72)",
-    padding: 12,
-  },
+  panel: { borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(10,10,10,0.72)", padding: 12 },
   empty: { padding: 10, color: "rgba(255,255,255,0.55)", fontSize: 13 },
 
-  row: {
-    display: "flex",
-    gap: 12,
-    alignItems: "center",
-    padding: "10px 8px",
-    borderBottom: "1px solid rgba(255,255,255,0.06)",
-  },
+  row: { display: "flex", gap: 12, padding: "10px 8px" },
   rowTitle: { fontSize: 14, fontWeight: 650, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   rowSub: { marginTop: 2, fontSize: 12, color: "rgba(255,255,255,0.60)" },
-  rowRight: { minWidth: 110, textAlign: "right", fontSize: 13, color: "rgba(255,255,255,0.85)" },
+  rowRight: { minWidth: 110, fontSize: 13, color: "rgba(255,255,255,0.85)" },
 
   input: {
     width: "100%",
@@ -518,107 +516,31 @@ const styles: Record<string, React.CSSProperties> = {
     outline: "none",
     fontSize: 13,
   },
-  productsGrid: {
-    marginTop: 12,
-    display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-    gap: 10,
-  },
-  productCard: {
-    textAlign: "left",
-    borderRadius: 14,
-    border: "1px solid rgba(255,255,255,0.08)",
-    background: "rgba(14,14,14,0.85)",
-    padding: 12,
-    cursor: "pointer",
-  },
+  productsGrid: { marginTop: 12, display: "grid", gap: 10 },
+  productCard: { textAlign: "left", borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(14,14,14,0.85)", padding: 12, cursor: "pointer" },
   productName: { fontSize: 14, fontWeight: 700 },
   productMeta: { marginTop: 4, fontSize: 12, color: "rgba(255,255,255,0.62)" },
 
-  overlay: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.70)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-    zIndex: 50,
-  },
-  modal: {
-    width: "100%",
-    maxWidth: 520,
-    borderRadius: 18,
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(10,10,10,0.92)",
-    padding: 14,
-    boxShadow: "0 12px 40px rgba(0,0,0,0.55)",
-  },
+  selectInline: { padding: "11px 12px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.25)", color: "#fff", outline: "none", fontSize: 13 },
+
+  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.70)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 50 },
+  modal: { width: "100%", maxWidth: 520, borderRadius: 18, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(10,10,10,0.92)", padding: 14, boxShadow: "0 12px 40px rgba(0,0,0,0.55)" },
   modalTitle: { fontSize: 18, fontWeight: 760 },
   modalSub: { marginTop: 4, fontSize: 12, color: "rgba(255,255,255,0.60)" },
   label: { display: "block", fontSize: 12, color: "rgba(255,255,255,0.65)", marginBottom: 6 },
-  select: {
-    width: "100%",
-    padding: "11px 12px",
-    borderRadius: 14,
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(0,0,0,0.25)",
-    color: "#fff",
-    outline: "none",
-    fontSize: 13,
-  },
-  modalErr: {
-    marginTop: 10,
-    padding: "10px 12px",
-    borderRadius: 14,
-    border: "1px solid rgba(255,77,77,0.25)",
-    background: "rgba(255,77,77,0.08)",
-    color: "#ff9a9a",
-    fontSize: 13,
-  },
+  select: { width: "100%", padding: "11px 12px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.25)", color: "#fff", outline: "none", fontSize: 13 },
+  modalErr: { marginTop: 10, padding: "10px 12px", borderRadius: 14, border: "1px solid rgba(255,77,77,0.25)", background: "rgba(255,77,77,0.08)", color: "#ff9a9a", fontSize: 13 },
 };
 
 function btnPrimary(): React.CSSProperties {
-  return {
-    padding: "11px 14px",
-    borderRadius: 14,
-    background: "#f5c400",
-    color: "#000",
-    fontWeight: 800,
-    border: "1px solid rgba(0,0,0,0.25)",
-    cursor: "pointer",
-  };
+  return { padding: "11px 14px", borderRadius: 14, background: "#f5c400", color: "#000", fontWeight: 800, border: "1px solid rgba(0,0,0,0.25)", cursor: "pointer" };
 }
 function btnSecondary(): React.CSSProperties {
-  return {
-    padding: "11px 14px",
-    borderRadius: 14,
-    background: "rgba(255,255,255,0.05)",
-    color: "#fff",
-    fontWeight: 650,
-    border: "1px solid rgba(255,255,255,0.12)",
-    cursor: "pointer",
-  };
+  return { padding: "11px 14px", borderRadius: 14, background: "rgba(255,255,255,0.05)", color: "#fff", fontWeight: 650, border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer" };
 }
 function btnGhost(): React.CSSProperties {
-  return {
-    padding: "10px 12px",
-    borderRadius: 14,
-    background: "transparent",
-    color: "rgba(255,255,255,0.85)",
-    fontWeight: 650,
-    border: "1px solid rgba(255,255,255,0.10)",
-    cursor: "pointer",
-  };
+  return { padding: "10px 12px", borderRadius: 14, background: "transparent", color: "rgba(255,255,255,0.85)", fontWeight: 650, border: "1px solid rgba(255,255,255,0.10)", cursor: "pointer" };
 }
 function btnMini(): React.CSSProperties {
-  return {
-    padding: "8px 10px",
-    borderRadius: 12,
-    background: "rgba(255,255,255,0.05)",
-    color: "#fff",
-    fontWeight: 800,
-    border: "1px solid rgba(255,255,255,0.10)",
-    cursor: "pointer",
-  };
+  return { padding: "8px 10px", borderRadius: 12, background: "rgba(255,255,255,0.05)", color: "#fff", fontWeight: 800, border: "1px solid rgba(255,255,255,0.10)", cursor: "pointer" };
 }
