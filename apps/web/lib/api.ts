@@ -1,7 +1,18 @@
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
+function getAuthToken() {
+  if (typeof window === "undefined") return null;
+
+  // ✅ Canon: "token"
+  const t = localStorage.getItem("token");
+  if (t) return t;
+
+  // ✅ Back-compat: si venías usando accessToken, lo seguimos aceptando
+  return localStorage.getItem("accessToken");
+}
+
 export async function api<T>(path: string, opts: RequestInit = {}) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+  const token = getAuthToken();
   const p = path.startsWith("/") ? path : `/${path}`;
 
   const headers = new Headers(opts.headers || {});
@@ -12,6 +23,8 @@ export async function api<T>(path: string, opts: RequestInit = {}) {
 
   // ✅ anti-loop: si ya estás en /login, NO redirijas de nuevo
   if (res.status === 401 && typeof window !== "undefined") {
+    // limpia ambas keys para evitar sesión pegada
+    localStorage.removeItem("token");
     localStorage.removeItem("accessToken");
     localStorage.removeItem("user");
 
@@ -32,4 +45,3 @@ export async function api<T>(path: string, opts: RequestInit = {}) {
 
   return (await res.json()) as T;
 }
-
