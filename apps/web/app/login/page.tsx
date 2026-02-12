@@ -18,21 +18,39 @@ export default function LoginPage() {
     setErr(null);
     setLoading(true);
 
+    // ✅ importante: limpia sesión anterior SIEMPRE
     try {
-      const out = await login(username, password);
+      localStorage.removeItem("token");
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("user");
+    } catch {}
+
+    try {
+      const out = await login(username.trim(), password);
 
       const token = out?.accessToken ?? out?.access_token;
-      if (!token) throw new Error("Token inválido");
+      if (!token) throw new Error("Token inválido (no viene accessToken)");
 
+      const user = out?.user ?? null;
+      if (!user) throw new Error("Respuesta sin user");
+
+      // ✅ blindaje: role es clave para permisos
+      if (!user?.role) throw new Error("Usuario sin role (no puedo asignar permisos)");
+
+      // ✅ compat: algunas partes leen token, otras accessToken
+      localStorage.setItem("token", token);
       localStorage.setItem("accessToken", token);
-      if (out?.user) localStorage.setItem("user", JSON.stringify(out.user));
+      localStorage.setItem("user", JSON.stringify(user));
 
       r.replace("/tables");
     } catch (e) {
       console.error(e);
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("user");
-      setErr("Usuario o clave incorrecta.");
+      try {
+        localStorage.removeItem("token");
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("user");
+      } catch {}
+      setErr("Usuario o clave incorrecta (o sesión inválida).");
     } finally {
       setLoading(false);
     }
@@ -56,7 +74,7 @@ export default function LoginPage() {
 
         {err && <div style={{ marginTop: 10, color: "#ff4d4d", fontSize: 13 }}>{err}</div>}
 
-        <button type="submit" disabled={loading} style={btn()}>
+        <button type="submit" disabled={loading} style={btn(loading)}>
           {loading ? "Entrando..." : "Entrar"}
         </button>
       </form>
@@ -77,7 +95,7 @@ function inp(): React.CSSProperties {
   };
 }
 
-function btn(): React.CSSProperties {
+function btn(disabled: boolean): React.CSSProperties {
   return {
     width: "100%",
     marginTop: 14,
@@ -87,8 +105,7 @@ function btn(): React.CSSProperties {
     background: "#f5c400",
     color: "#000",
     fontWeight: 900,
-    cursor: "pointer",
-    opacity: 1,
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.7 : 1,
   };
 }
-
