@@ -58,6 +58,7 @@ export default function TablesPage() {
   }, []);
 
   const role = user?.role;
+  const isAdmin = role === "MASTER" || role === "SLAVE";
 
   async function load() {
     setErr(null);
@@ -96,7 +97,6 @@ export default function TablesPage() {
   }
 
   const gridCols = useMemo(() => {
-    // celu: 2 columnas (se lee bien). si quieres 1 columna, cambia a "repeat(1, ...)"
     return isNarrow ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))";
   }, [isNarrow]);
 
@@ -119,14 +119,26 @@ export default function TablesPage() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <button style={btnPrimary()} disabled={loading}>
+        {/* Acciones */}
+        <div style={S.actions}>
+          {/* ✅ menú admin (solo MASTER/SLAVE) */}
+          {isAdmin && (
+            <>
+              <button style={btnGhost()} onClick={() => router.push("/products")}>Productos</button>
+              <button style={btnGhost()} onClick={() => router.push("/users")}>Usuarios</button>
+              <button style={btnGhost()} onClick={() => router.push("/reports")}>Reportes</button>
+            </>
+          )}
+
+          <button style={btnPrimary()} disabled={loading} onClick={() => router.push("/cash")}>
             Caja (mi turno)
           </button>
+
           <button
             style={btnSecondary()}
             onClick={() => {
               localStorage.removeItem("token");
+              localStorage.removeItem("accessToken");
               localStorage.removeItem("user");
               router.replace("/login");
             }}
@@ -138,7 +150,7 @@ export default function TablesPage() {
 
       {err && <div style={S.alert}>{err}</div>}
 
-      {/* Grid responsive real */}
+      {/* Grid responsive */}
       <div style={{ ...S.grid, gridTemplateColumns: gridCols }}>
         {tables.map((t) => {
           const occupied = !!t.ticket;
@@ -215,6 +227,14 @@ const S: Record<string, React.CSSProperties> = {
   brandTitle: { fontSize: 30, fontWeight: 820, letterSpacing: 0.2 },
   brandSub: { fontSize: 13, color: "rgba(255,255,255,0.70)" },
 
+  actions: {
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+  },
+
   alert: {
     marginTop: 12,
     padding: "10px 12px",
@@ -225,11 +245,7 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: 13,
   },
 
-  grid: {
-    marginTop: 14,
-    display: "grid",
-    gap: 12,
-  },
+  grid: { marginTop: 14, display: "grid", gap: 12 },
 
   card: {
     borderRadius: 18,
@@ -288,6 +304,17 @@ function btnSecondary(): React.CSSProperties {
     color: "#fff",
     fontWeight: 750,
     border: "1px solid rgba(255,255,255,0.14)",
+    cursor: "pointer",
+  };
+}
+function btnGhost(): React.CSSProperties {
+  return {
+    padding: "12px 14px",
+    borderRadius: 16,
+    background: "rgba(255,255,255,0.03)",
+    color: "rgba(255,255,255,0.92)",
+    fontWeight: 750,
+    border: "1px solid rgba(255,255,255,0.10)",
     cursor: "pointer",
   };
 }
