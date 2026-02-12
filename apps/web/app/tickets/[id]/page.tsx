@@ -296,21 +296,12 @@ export default function TicketPage() {
               alignItems: "center",
             }}
           >
-            <select
-              value={payMethod}
-              onChange={(e) => setPayMethod(e.target.value as PayMethod)}
-              style={styles.selectInline}
-              disabled={!canCheckout || loading}
-            >
+            <select value={payMethod} onChange={(e) => setPayMethod(e.target.value as PayMethod)} style={styles.selectInline} disabled={!canCheckout || loading}>
               <option value="CASH">CASH</option>
               <option value="DEBIT">DEBIT</option>
             </select>
 
-            <button
-              disabled={!canCheckout || loading}
-              onClick={() => checkout(payMethod)}
-              style={{ ...btnPrimary(), width: "100%" }}
-            >
+            <button disabled={!canCheckout || loading} onClick={() => checkout(payMethod)} style={{ ...btnPrimary(), width: "100%" }}>
               Cobrar
             </button>
           </div>
@@ -330,7 +321,11 @@ export default function TicketPage() {
           <div style={styles.cardLabel}>Arriendo</div>
           <div style={styles.cardValue}>{formatCLP(totals?.rental ?? 0)}</div>
           <div style={styles.cardHint}>
-            {ticket.kind === "RENTAL" && ticket.status === "OPEN" ? "Estimado en vivo (se actualiza solo)" : ticket.kind === "RENTAL" ? "Calculado" : "—"}
+            {ticket.kind === "RENTAL" && ticket.status === "OPEN"
+              ? "Estimado en vivo (se actualiza solo)"
+              : ticket.kind === "RENTAL"
+              ? "Calculado"
+              : "—"}
           </div>
         </div>
 
@@ -502,9 +497,16 @@ const styles: Record<string, React.CSSProperties> = {
   empty: { padding: 10, color: "rgba(255,255,255,0.55)", fontSize: 13 },
 
   row: { display: "flex", gap: 12, padding: "10px 8px" },
-  rowTitle: { fontSize: 14, fontWeight: 650, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-  rowSub: { marginTop: 2, fontSize: 12, color: "rgba(255,255,255,0.60)" },
-  rowRight: { minWidth: 110, fontSize: 13, color: "rgba(255,255,255,0.85)" },
+  rowTitle: {
+    fontSize: 15,
+    fontWeight: 800,
+    color: "rgba(255,255,255,0.96)",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  rowSub: { marginTop: 3, fontSize: 12, color: "rgba(255,255,255,0.72)" },
+  rowRight: { minWidth: 110, fontSize: 13, color: "rgba(255,255,255,0.88)" },
 
   input: {
     width: "100%",
@@ -517,11 +519,26 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
   },
   productsGrid: { marginTop: 12, display: "grid", gap: 10 },
-  productCard: { textAlign: "left", borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(14,14,14,0.85)", padding: 12, cursor: "pointer" },
-  productName: { fontSize: 14, fontWeight: 700 },
-  productMeta: { marginTop: 4, fontSize: 12, color: "rgba(255,255,255,0.62)" },
+  productCard: {
+    textAlign: "left",
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.08)",
+    background: "linear-gradient(180deg, rgba(20,20,20,0.92), rgba(10,10,10,0.88))",
+    padding: 12,
+    cursor: "pointer",
+  },
+  productName: { fontSize: 14, fontWeight: 800, color: "rgba(255,255,255,0.96)" },
+  productMeta: { marginTop: 4, fontSize: 12, color: "rgba(255,255,255,0.72)" },
 
-  selectInline: { padding: "11px 12px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.25)", color: "#fff", outline: "none", fontSize: 13 },
+  selectInline: {
+    padding: "11px 12px",
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(0,0,0,0.25)",
+    color: "#fff",
+    outline: "none",
+    fontSize: 13,
+  },
 
   overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.70)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 50 },
   modal: { width: "100%", maxWidth: 520, borderRadius: 18, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(10,10,10,0.92)", padding: 14, boxShadow: "0 12px 40px rgba(0,0,0,0.55)" },
