@@ -1,287 +1,293 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
 type Role = "MASTER" | "SLAVE" | "SELLER";
+type TicketKind = "RENTAL" | "BAR";
+type TicketStatus = "OPEN" | "CHECKOUT" | "PAID" | "CANCELED";
 
 type TableState = {
   id: number;
   name: string;
   type: "POOL" | "BAR";
-  ticket: any | null;
+  ticket: {
+    id: string;
+    kind: TicketKind;
+    status: TicketStatus;
+  } | null;
 };
 
-function normalizeTables(raw: any): TableState[] {
-  let v = raw;
+function useIsNarrow(breakpoint = 820) {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const on = () => setNarrow(window.innerWidth < breakpoint);
+    on();
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, [breakpoint]);
+  return narrow;
+}
 
-  // Si vino como string JSON
-  if (typeof v === "string") {
-    const s = v.trim();
-    if ((s.startsWith("{") && s.endsWith("}")) || (s.startsWith("[") && s.endsWith("]"))) {
-      try {
-        v = JSON.parse(s);
-      } catch {
-        return [];
-      }
-    } else {
-      return [];
-    }
-  }
+function pill(status: TicketStatus) {
+  if (status === "OPEN") return { bg: "rgba(245,196,0,0.14)", bd: "rgba(245,196,0,0.35)", fg: "#f5c400", label: "OPEN" };
+  if (status === "CHECKOUT") return { bg: "rgba(255,255,255,0.08)", bd: "rgba(255,255,255,0.18)", fg: "#fff", label: "CHECKOUT" };
+  if (status === "PAID") return { bg: "rgba(0,255,128,0.10)", bd: "rgba(0,255,128,0.22)", fg: "#8cffc0", label: "PAID" };
+  return { bg: "rgba(255,77,77,0.10)", bd: "rgba(255,77,77,0.22)", fg: "#ff4d4d", label: "CANCELED" };
+}
 
-  // Si ya es array
-  if (Array.isArray(v)) return v as TableState[];
-
-  // Si viene envuelto
-  const candidates = [v?.tables, v?.data, v?.items, v?.result, v?.rows, v?.payload, v?.value, v?.body];
-  for (const c of candidates) if (Array.isArray(c)) return c as TableState[];
-
-  return [];
+function kindLabel(k: TicketKind) {
+  return k === "RENTAL" ? "RENTAL" : "BAR";
 }
 
 export default function TablesPage() {
-  const r = useRouter();
+  const router = useRouter();
+  const isNarrow = useIsNarrow(820);
 
-  const mounted = useRef(true);
-
-  const [tables, setTables] = useState<TableState[] | null>(null); // null = loading
+  const [tables, setTables] = useState<TableState[]>([]);
   const [err, setErr] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // user + token
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<{ role: Role; name?: string; username?: string } | null>(null);
+  useEffect(() => {
+    try {
+      const u = localStorage.getItem("user");
+      if (u) setUser(JSON.parse(u));
+    } catch {}
+  }, []);
+
+  const role = user?.role;
+
+  async function load() {
+    setErr(null);
+    try {
+      const data = await api<TableState[]>("/tables");
+      setTables(data || []);
+    } catch (e) {
+      console.error(e);
+      setErr("No pude cargar mesas");
+    }
+  }
 
   useEffect(() => {
-    mounted.current = true;
-
-    try {
-      setUser(JSON.parse(localStorage.getItem("user") || "null"));
-    } catch {
-      setUser(null);
-    }
-
-    const t = localStorage.getItem("accessToken");
-    setToken(t);
-
-    // si no hay token => login
-    if (!t) {
-      localStorage.removeItem("user");
-      r.replace("/login");
-    }
-
-    return () => {
-      mounted.current = false;
-    };
+    load();
+    const i = setInterval(load, 2500);
+    return () => clearInterval(i);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const role: Role | undefined = user?.role;
-
-  const canUsers = role === "MASTER" || role === "SLAVE";
-  const canProducts = role === "MASTER" || role === "SLAVE";
-  const canReports = role === "MASTER" || role === "SLAVE";
-  const canCashout = role === "SELLER";
-
-  async function refresh() {
-    if (!token) return; // no pegarle a la API sin token
-
+  async function openTicket(tableId: number) {
+    if (loading) return;
+    setLoading(true);
+    setErr(null);
     try {
-      setErr(null);
-      setRefreshing(true);
-
-      const raw = await api<any>("/tables");
-      const list = normalizeTables(raw);
-
-      if (list.length === 0) {
-        console.log("[/tables] raw response:", raw);
-      }
-
-      if (mounted.current) setTables(list);
+      const res = await api<{ id: string }>("/tickets/open", {
+        method: "POST",
+        body: JSON.stringify({ tableId }),
+      });
+      router.push(`/tickets/${res.id}`);
     } catch (e: any) {
       console.error(e);
-      if (mounted.current) {
-        setErr(e?.message || "No pude cargar mesas.");
-        setTables([]); // para que no quede eternamente loading
-      }
+      setErr(e?.message || "No pude abrir ticket");
     } finally {
-      if (mounted.current) setRefreshing(false);
+      setLoading(false);
     }
   }
 
-  useEffect(() => {
-    if (!token) return;
-
-    refresh();
-    const t = setInterval(refresh, 2000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
-  async function goTable(t: TableState) {
-    try {
-      setErr(null);
-
-      if (t.ticket?.id) {
-        r.push(`/tickets/${t.ticket.id}`);
-        return;
-      }
-
-      await api("/tickets/open", {
-        method: "POST",
-        body: JSON.stringify({ tableId: t.id }),
-      });
-
-      const raw = await api<any>("/tables");
-      const list = normalizeTables(raw);
-      setTables(list);
-
-      const opened = list.find((x) => x.id === t.id)?.ticket;
-      if (opened?.id) r.push(`/tickets/${opened.id}`);
-      else setErr("No pude abrir el ticket.");
-    } catch (e) {
-      console.error(e);
-      setErr("No pude abrir/entrar a la mesa.");
-    }
-  }
-
-  function logout() {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("user");
-    r.replace("/login");
-  }
-
-  const hasTables = useMemo(() => Array.isArray(tables) && tables.length > 0, [tables]);
+  const gridCols = useMemo(() => {
+    // celu: 2 columnas (se lee bien). si quieres 1 columna, cambia a "repeat(1, ...)"
+    return isNarrow ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))";
+  }, [isNarrow]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#060606", color: "#fff", padding: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ margin: 0 }}>Mesas & Barra</h1>
-          <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>Producción · anti-magia</div>
-          {role && (
-            <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 4 }}>
-              Rol: <b style={{ color: "#fff" }}>{role}</b>
-              {refreshing && <span style={{ marginLeft: 10, color: "#f5c400" }}>⏳ refrescando…</span>}
+    <div style={S.page}>
+      {/* Header pro */}
+      <div style={S.header}>
+        <div style={S.brand}>
+          <img
+            src="/logo-klub.png"
+            alt="Klub House"
+            style={{ height: isNarrow ? 26 : 32, width: "auto", opacity: 0.95 }}
+          />
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <div style={S.brandTitle}>Mesas & Barra</div>
+            <div style={S.brandSub}>
+              Producción · anti-magia <span style={{ opacity: 0.35 }}>—</span> Rol:{" "}
+              <b style={{ color: "#fff" }}>{role || "—"}</b>
             </div>
-          )}
+          </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          {canReports && (
-            <a href="/reports" style={linkBtn()}>
-              Reportes
-            </a>
-          )}
-
-          {canCashout && (
-            <a href="/cashout" style={linkBtn()}>
-              Caja (mi turno)
-            </a>
-          )}
-
-          {canUsers && (
-            <a href="/users" style={linkBtn()}>
-              Usuarios
-            </a>
-          )}
-
-          {canProducts && (
-            <a href="/products" style={linkBtn()}>
-              Productos
-            </a>
-          )}
-
-          <button onClick={logout} style={btnSecondary()}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <button style={btnPrimary()} disabled={loading}>
+            Caja (mi turno)
+          </button>
+          <button
+            style={btnSecondary()}
+            onClick={() => {
+              localStorage.removeItem("token");
+              localStorage.removeItem("user");
+              router.replace("/login");
+            }}
+          >
             Salir
           </button>
         </div>
       </div>
 
-      {err && <div style={{ marginTop: 10, color: "#ff4d4d" }}>{err}</div>}
+      {err && <div style={S.alert}>{err}</div>}
 
-      {tables === null ? (
-        <div style={{ marginTop: 16, color: "#bdbdbd" }}>Cargando mesas…</div>
-      ) : hasTables ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginTop: 16 }}>
-          {tables!.map((t) => {
-            const busy = !!t.ticket;
-            const border = busy ? "#d6aa00" : "#f5c400";
-            const bg = busy ? "#1a1400" : "#0f0f0f";
+      {/* Grid responsive real */}
+      <div style={{ ...S.grid, gridTemplateColumns: gridCols }}>
+        {tables.map((t) => {
+          const occupied = !!t.ticket;
+          const p = t.ticket ? pill(t.ticket.status) : null;
 
-            return (
-              <div
-                key={t.id}
-                style={{
-                  background: bg,
-                  border: `2px solid ${border}`,
-                  borderRadius: 18,
-                  padding: 14,
-                  minHeight: 110,
-                }}
-              >
-                <div style={{ fontWeight: 900, fontSize: 16 }}>{t.name}</div>
-                <div style={{ color: "#bdbdbd", fontSize: 12, marginTop: 6 }}>
-                  {busy ? `Activo: ${t.ticket.kind} · ${t.ticket.status}` : "Libre"}
-                </div>
-
-                <button onClick={() => goTable(t)} style={btnPrimaryWide()}>
-                  {busy ? "Entrar" : t.type === "BAR" ? "Abrir ticket barra" : "Iniciar arriendo"}
-                </button>
+          return (
+            <div key={t.id} style={S.card}>
+              <div style={S.cardTop}>
+                <div style={S.tableName}>{t.name}</div>
+                <div style={S.typeTag}>{t.type}</div>
               </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div style={{ marginTop: 16, color: "#bdbdbd" }}>
-          No hay mesas para mostrar (o la API devolvió vacío). Si en Network ves 200 con data, revisa formato:
-          <div style={{ marginTop: 6, fontSize: 12, color: "#777" }}>* Este page acepta [] o {"{ tables: [] }"}.</div>
-        </div>
-      )}
+
+              <div style={S.body}>
+                {occupied ? (
+                  <>
+                    <div style={S.statusRow}>
+                      <span style={S.dim}>Activo</span>
+                      <span style={S.kind}>{kindLabel(t.ticket!.kind)}</span>
+                    </div>
+
+                    <div style={{ ...S.pill, background: p!.bg, borderColor: p!.bd, color: p!.fg }}>
+                      {p!.label}
+                    </div>
+
+                    <button
+                      style={{ ...btnPrimary(), width: "100%", marginTop: 10 }}
+                      onClick={() => router.push(`/tickets/${t.ticket!.id}`)}
+                      disabled={loading}
+                    >
+                      Entrar
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div style={S.free}>Libre</div>
+                    <button
+                      style={{ ...btnPrimary(), width: "100%", marginTop: 10 }}
+                      onClick={() => openTicket(t.id)}
+                      disabled={loading}
+                    >
+                      Iniciar
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function linkBtn(): React.CSSProperties {
-  return {
-    color: "#f5c400",
-    fontWeight: 900,
-    textDecoration: "none",
-    border: "1px solid #f5c400",
-    padding: "8px 12px",
-    borderRadius: 12,
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 8,
-    whiteSpace: "nowrap",
-  };
-}
-
-function btnSecondary(): React.CSSProperties {
-  return {
-    padding: "8px 12px",
-    borderRadius: 12,
-    border: "1px solid #444",
-    background: "#111",
+const S: Record<string, React.CSSProperties> = {
+  page: {
+    minHeight: "100vh",
+    background: "radial-gradient(1200px 500px at 20% 0%, rgba(245,196,0,0.10), transparent 55%), #050505",
     color: "#fff",
-    fontWeight: 900,
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-  };
-}
+    padding: 16,
+  },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "center",
+    padding: "12px 14px",
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.08)",
+    background: "rgba(10,10,10,0.72)",
+    backdropFilter: "blur(10px)",
+    flexWrap: "wrap",
+  },
+  brand: { display: "flex", alignItems: "center", gap: 12 },
+  brandTitle: { fontSize: 30, fontWeight: 820, letterSpacing: 0.2 },
+  brandSub: { fontSize: 13, color: "rgba(255,255,255,0.70)" },
 
-function btnPrimaryWide(): React.CSSProperties {
-  return {
+  alert: {
     marginTop: 12,
-    width: "100%",
+    padding: "10px 12px",
     borderRadius: 14,
-    border: "none",
+    border: "1px solid rgba(255,77,77,0.25)",
+    background: "rgba(255,77,77,0.08)",
+    color: "#ff9a9a",
+    fontSize: 13,
+  },
+
+  grid: {
+    marginTop: 14,
+    display: "grid",
+    gap: 12,
+  },
+
+  card: {
+    borderRadius: 18,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(10,10,10,0.78)",
+    padding: 12,
+    boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+    minHeight: 150,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+  },
+  cardTop: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" },
+  tableName: { fontSize: 20, fontWeight: 900, letterSpacing: 0.4 },
+  typeTag: {
+    fontSize: 12,
+    padding: "6px 10px",
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.05)",
+    color: "rgba(255,255,255,0.85)",
+  },
+
+  body: { marginTop: 10, display: "flex", flexDirection: "column", gap: 8 },
+  statusRow: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" },
+  dim: { color: "rgba(255,255,255,0.60)", fontSize: 13 },
+  kind: { color: "rgba(255,255,255,0.90)", fontSize: 13, fontWeight: 800, letterSpacing: 0.4 },
+  free: { fontSize: 16, color: "rgba(255,255,255,0.70)" },
+
+  pill: {
+    padding: "8px 10px",
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.18)",
+    fontSize: 12,
+    letterSpacing: 0.6,
+    width: "fit-content",
+  },
+};
+
+function btnPrimary(): React.CSSProperties {
+  return {
+    padding: "12px 14px",
+    borderRadius: 16,
     background: "#f5c400",
     color: "#000",
     fontWeight: 900,
-    padding: "10px 12px",
+    border: "1px solid rgba(0,0,0,0.25)",
     cursor: "pointer",
-    whiteSpace: "nowrap",
+  };
+}
+function btnSecondary(): React.CSSProperties {
+  return {
+    padding: "12px 14px",
+    borderRadius: 16,
+    background: "rgba(255,255,255,0.06)",
+    color: "#fff",
+    fontWeight: 750,
+    border: "1px solid rgba(255,255,255,0.14)",
+    cursor: "pointer",
   };
 }
