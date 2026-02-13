@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "node ../../node_modules/@nestjs/cli/bin/nest.js start --watch",
-    "build": "npx prisma generate --schema=../../prisma/schema.prisma && node ../../node_modules/@nestjs/cli/bin/nest.js build",
+    "build": "npx prisma generate --schema=../../prisma/schema.prisma && tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "prisma:generate": "npx prisma generate --schema=../../prisma/schema.prisma",
     "prisma:migrate": "npx prisma migrate deploy --schema=../../prisma/schema.prisma",
