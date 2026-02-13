@@ -63,12 +63,12 @@ export default function LoginPage() {
       <form onSubmit={onSubmit} style={styles.card}>
         {/* top brand row */}
         <div style={styles.topRow}>
-          <img src="/logo-klub.png" alt="Klub House" style={styles.logoLeft} />
+          <img src="/Logo-Klub.png" alt="Klub House" style={styles.logoLeft} />
           <div style={styles.brandCenter}>
             <div style={styles.title}>KLUB HOUSE · POS</div>
             <div style={styles.subtitle}>Ingreso de usuario</div>
           </div>
-          <img src="/logo-club.png" alt="Billiard Club" style={styles.logoRight} />
+          <img src="/Logo-Club.png" alt="Billiard Club" style={styles.logoRight} />
         </div>
 
         {/* inputs */}
