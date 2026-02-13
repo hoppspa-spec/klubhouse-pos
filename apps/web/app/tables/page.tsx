@@ -1,324 +1,166 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { login } from "@/lib/auth";
 
-type Role = "MASTER" | "SLAVE" | "SELLER";
-type TicketKind = "RENTAL" | "BAR";
-type TicketStatus = "OPEN" | "CHECKOUT" | "PAID" | "CANCELED";
-
-type TableState = {
-  id: number;
-  name: string;
-  type: "POOL" | "BAR";
-  ticket: {
-    id: string;
-    kind: TicketKind;
-    status: TicketStatus;
-  } | null;
-};
-
-function useIsNarrow(breakpoint = 820) {
-  const [narrow, setNarrow] = useState(false);
-  useEffect(() => {
-    const on = () => setNarrow(window.innerWidth < breakpoint);
-    on();
-    window.addEventListener("resize", on);
-    return () => window.removeEventListener("resize", on);
-  }, [breakpoint]);
-  return narrow;
-}
-
-function pill(status: TicketStatus) {
-  if (status === "OPEN") return { bg: "rgba(245,196,0,0.14)", bd: "rgba(245,196,0,0.35)", fg: "#f5c400", label: "OPEN" };
-  if (status === "CHECKOUT") return { bg: "rgba(255,255,255,0.08)", bd: "rgba(255,255,255,0.18)", fg: "#fff", label: "CHECKOUT" };
-  if (status === "PAID") return { bg: "rgba(0,255,128,0.10)", bd: "rgba(0,255,128,0.22)", fg: "#8cffc0", label: "PAID" };
-  return { bg: "rgba(255,77,77,0.10)", bd: "rgba(255,77,77,0.22)", fg: "#ff4d4d", label: "CANCELED" };
-}
-
-function kindLabel(k: TicketKind) {
-  return k === "RENTAL" ? "RENTAL" : "BAR";
-}
-
-export default function TablesPage() {
-  const router = useRouter();
-  const isNarrow = useIsNarrow(820);
-
-  const [tables, setTables] = useState<TableState[]>([]);
+export default function LoginPage() {
+  const r = useRouter();
+  const [username, setU] = useState("");
+  const [password, setP] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const [user, setUser] = useState<{ role: Role; name?: string; username?: string } | null>(null);
-  useEffect(() => {
-    try {
-      const u = localStorage.getItem("user");
-      if (u) setUser(JSON.parse(u));
-    } catch {}
-  }, []);
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (loading) return;
 
-  const role = user?.role;
-  const isAdmin = role === "MASTER" || role === "SLAVE";
-
-  async function load() {
     setErr(null);
+    setLoading(true);
+
+    // ✅ limpia sesión anterior SIEMPRE
     try {
-      const data = await api<TableState[]>("/tables");
-      setTables(data || []);
+      localStorage.removeItem("token");
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("user");
+    } catch {}
+
+    try {
+      const out = await login(username.trim(), password);
+
+      const token = out?.accessToken ?? out?.access_token;
+      if (!token) throw new Error("Token inválido (no viene accessToken)");
+
+      const user = out?.user ?? null;
+      if (!user) throw new Error("Respuesta sin user");
+      if (!user?.role) throw new Error("Usuario sin role (no puedo asignar permisos)");
+
+      // ✅ compat: algunas partes leen token, otras accessToken
+      localStorage.setItem("token", token);
+      localStorage.setItem("accessToken", token);
+      localStorage.setItem("user", JSON.stringify(user));
+
+      r.replace("/tables");
     } catch (e) {
       console.error(e);
-      setErr("No pude cargar mesas");
-    }
-  }
-
-  useEffect(() => {
-    load();
-    const i = setInterval(load, 2500);
-    return () => clearInterval(i);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function openTicket(tableId: number) {
-    if (loading) return;
-    setLoading(true);
-    setErr(null);
-    try {
-      const res = await api<{ id: string }>("/tickets/open", {
-        method: "POST",
-        body: JSON.stringify({ tableId }),
-      });
-      router.push(`/tickets/${res.id}`);
-    } catch (e: any) {
-      console.error(e);
-      setErr(e?.message || "No pude abrir ticket");
+      try {
+        localStorage.removeItem("token");
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("user");
+      } catch {}
+      setErr("Usuario o clave incorrecta (o sesión inválida).");
     } finally {
       setLoading(false);
     }
   }
 
-  const gridCols = useMemo(() => {
-    return isNarrow ? "repeat(1, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))";
-  }, [isNarrow]);
-
   return (
-    <div style={S.page}>
-      {/* Header pro */}
-      <div style={S.header}>
-        <div style={S.brand}>
-          <img
-            src="/Logo-Klub.png"
-             alt="Klub House"
-             style={{
-             height: "clamp(40px, 5vw, 64px)",
-             width: "auto",
-             objectFit: "contain",
-           }}
-         />
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <div style={S.brandTitle}>Mesas & Barra</div>
-            <div style={S.brandSub}>
-              Producción · anti-magia <span style={{ opacity: 0.35 }}>—</span> Rol:{" "}
-              <b style={{ color: "#fff" }}>{role || "—"}</b>
-            </div>
-          </div>
+    <div style={styles.page}>
+      <form onSubmit={onSubmit} style={styles.card}>
+        {/* LOGOS */}
+        <div style={styles.logosRow}>
+          <img src="/Logo-Klub.png" alt="Klub House" style={styles.logo} />
+          <img src="/Logo-Club.png" alt="Billiard Club" style={styles.logo} />
         </div>
 
-        {/* Acciones */}
-        <div style={S.actions}>
-          {/* ✅ menú admin (solo MASTER/SLAVE) */}
-          {isAdmin && (
-            <>
-              <button style={btnGhost()} onClick={() => router.push("/products")}>Productos</button>
-              <button style={btnGhost()} onClick={() => router.push("/users")}>Usuarios</button>
-              <button style={btnGhost()} onClick={() => router.push("/reports")}>Reportes</button>
-            </>
-          )}
-
-          <button style={btnPrimary()} disabled={loading} onClick={() => router.push("/cash")}>
-            Caja (mi turno)
-          </button>
-
-          <button
-            style={btnSecondary()}
-            onClick={() => {
-              localStorage.removeItem("token");
-              localStorage.removeItem("accessToken");
-              localStorage.removeItem("user");
-              router.replace("/login");
-            }}
-          >
-            Salir
-          </button>
+        {/* TITLE */}
+        <div style={styles.titleWrap}>
+          <div style={styles.title}>KLUB HOUSE · POS</div>
+          <div style={styles.subtitle}>Ingreso de usuario</div>
         </div>
-      </div>
 
-      {err && <div style={S.alert}>{err}</div>}
+        {/* USER */}
+        <div style={{ marginTop: 10 }}>
+          <label style={styles.label}>Usuario</label>
+          <input
+            value={username}
+            onChange={(e) => setU(e.target.value)}
+            style={inp()}
+            autoComplete="username"
+          />
+        </div>
 
-      {/* Grid responsive */}
-      <div style={{ ...S.grid, gridTemplateColumns: gridCols }}>
-        {tables.map((t) => {
-          const occupied = !!t.ticket;
-          const p = t.ticket ? pill(t.ticket.status) : null;
+        {/* PASS */}
+        <div style={{ marginTop: 14 }}>
+          <label style={styles.label}>Clave</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setP(e.target.value)}
+            style={inp()}
+            autoComplete="current-password"
+          />
+        </div>
 
-          return (
-            <div key={t.id} style={S.card}>
-              <div style={S.cardTop}>
-                <div style={S.tableName}>{t.name}</div>
-                <div style={S.typeTag}>{t.type}</div>
-              </div>
+        {err && <div style={styles.err}>{err}</div>}
 
-              <div style={S.body}>
-                {occupied ? (
-                  <>
-                    <div style={S.statusRow}>
-                      <span style={S.dim}>Activo</span>
-                      <span style={S.kind}>{kindLabel(t.ticket!.kind)}</span>
-                    </div>
+        <button type="submit" disabled={loading} style={btn(loading)}>
+          {loading ? "Entrando..." : "Entrar"}
+        </button>
 
-                    <div style={{ ...S.pill, background: p!.bg, borderColor: p!.bd, color: p!.fg }}>
-                      {p!.label}
-                    </div>
-
-                    <button
-                      style={{ ...btnPrimary(), width: "100%", marginTop: 10 }}
-                      onClick={() => router.push(`/tickets/${t.ticket!.id}`)}
-                      disabled={loading}
-                    >
-                      Entrar
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <div style={S.free}>Libre</div>
-                    <button
-                      style={{ ...btnPrimary(), width: "100%", marginTop: 10 }}
-                      onClick={() => openTicket(t.id)}
-                      disabled={loading}
-                    >
-                      Iniciar
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+        <div style={styles.footerId}>ID: klub_house_pool</div>
+      </form>
     </div>
   );
 }
 
-const S: Record<string, React.CSSProperties> = {
+const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
-    background: "radial-gradient(1200px 500px at 20% 0%, rgba(245,196,0,0.10), transparent 55%), #050505",
+    background: "radial-gradient(800px 400px at 50% 0%, rgba(245,196,0,0.08), transparent 60%), #060606",
     color: "#fff",
-    padding: 16,
+    display: "grid",
+    placeItems: "center",
+    padding: 20,
   },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 12,
-    alignItems: "center",
-    padding: "12px 14px",
-    borderRadius: 16,
-    border: "1px solid rgba(255,255,255,0.08)",
-    background: "rgba(10,10,10,0.72)",
-    backdropFilter: "blur(10px)",
-    flexWrap: "wrap",
-  },
-  brand: { display: "flex", alignItems: "center", gap: 12 },
-  brandTitle: { fontSize: 30, fontWeight: 820, letterSpacing: 0.2 },
-  brandSub: { fontSize: 13, color: "rgba(255,255,255,0.70)" },
-
-  actions: {
-    display: "flex",
-    gap: 10,
-    alignItems: "center",
-    flexWrap: "wrap",
-    justifyContent: "flex-end",
-  },
-
-  alert: {
-    marginTop: 12,
-    padding: "10px 12px",
-    borderRadius: 14,
-    border: "1px solid rgba(255,77,77,0.25)",
-    background: "rgba(255,77,77,0.08)",
-    color: "#ff9a9a",
-    fontSize: 13,
-  },
-
-  grid: { marginTop: 14, display: "grid", gap: 12 },
-
   card: {
-    borderRadius: 18,
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(10,10,10,0.78)",
-    padding: 12,
-    boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-    minHeight: 150,
+    width: "min(420px, 100%)",
+    background: "#0d0d0d",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 20,
+    padding: 26,
+    boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+  },
+  logosRow: {
     display: "flex",
-    flexDirection: "column",
-    justifyContent: "space-between",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 20,
+    marginBottom: 18,
   },
-  cardTop: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" },
-  tableName: { fontSize: 20, fontWeight: 900, letterSpacing: 0.4 },
-  typeTag: {
-    fontSize: 12,
-    padding: "6px 10px",
-    borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.05)",
-    color: "rgba(255,255,255,0.85)",
-  },
-
-  body: { marginTop: 10, display: "flex", flexDirection: "column", gap: 8 },
-  statusRow: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" },
-  dim: { color: "rgba(255,255,255,0.60)", fontSize: 13 },
-  kind: { color: "rgba(255,255,255,0.90)", fontSize: 13, fontWeight: 800, letterSpacing: 0.4 },
-  free: { fontSize: 16, color: "rgba(255,255,255,0.70)" },
-
-  pill: {
-    padding: "8px 10px",
-    borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.18)",
-    fontSize: 12,
-    letterSpacing: 0.6,
-    width: "fit-content",
-  },
+  logo: { height: 70, width: "auto", objectFit: "contain" },
+  titleWrap: { textAlign: "center", marginBottom: 18 },
+  title: { fontWeight: 800, fontSize: 18 },
+  subtitle: { color: "#9a9a9a", fontSize: 13, marginTop: 4 },
+  label: { fontSize: 12, color: "#9a9a9a" },
+  err: { marginTop: 12, color: "#ff4d4d", fontSize: 13 },
+  footerId: { textAlign: "center", marginTop: 16, fontSize: 12, color: "#6f6f6f" },
 };
 
-function btnPrimary(): React.CSSProperties {
+function inp(): React.CSSProperties {
   return {
+    width: "100%",
+    marginTop: 6,
+    padding: "11px 12px",
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(0,0,0,0.25)",
+    color: "#fff",
+    outline: "none",
+  };
+}
+
+function btn(disabled: boolean): React.CSSProperties {
+  return {
+    width: "100%",
+    marginTop: 16,
     padding: "12px 14px",
     borderRadius: 16,
+    border: "1px solid rgba(0,0,0,0.25)",
     background: "#f5c400",
     color: "#000",
     fontWeight: 900,
-    border: "1px solid rgba(0,0,0,0.25)",
-    cursor: "pointer",
-  };
-}
-function btnSecondary(): React.CSSProperties {
-  return {
-    padding: "12px 14px",
-    borderRadius: 16,
-    background: "rgba(255,255,255,0.06)",
-    color: "#fff",
-    fontWeight: 750,
-    border: "1px solid rgba(255,255,255,0.14)",
-    cursor: "pointer",
-  };
-}
-function btnGhost(): React.CSSProperties {
-  return {
-    padding: "12px 14px",
-    borderRadius: 16,
-    background: "rgba(255,255,255,0.03)",
-    color: "rgba(255,255,255,0.92)",
-    fontWeight: 750,
-    border: "1px solid rgba(255,255,255,0.10)",
-    cursor: "pointer",
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.7 : 1,
   };
 }
