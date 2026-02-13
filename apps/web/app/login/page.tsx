@@ -128,7 +128,11 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 20,
     marginBottom: 18,
   },
-  logo: { height: 70, width: "auto", objectFit: "contain" },
+  logo: {
+    height: "clamp(70px, 8vw, 90px)",
+    width: "auto",
+    objectFit: "contain",
+  },
   titleWrap: { textAlign: "center", marginBottom: 18 },
   title: { fontWeight: 800, fontSize: 18 },
   subtitle: { color: "#9a9a9a", fontSize: 13, marginTop: 4 },
