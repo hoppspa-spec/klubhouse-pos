@@ -17,19 +17,22 @@ export function roundUp100(n: number) {
  * - Nocturno: $4.800 por hora desde 00:00 hasta 06:00 (Chile)
  * - Se cobra por hora proporcional (por minuto), y al final redondeo a 100 (opcional aquí o en total)
  */
-export function calcRental(minutes: number, endedAt: Date) {
-  const m = Math.max(0, Number(minutes) || 0);
+export function calcRental(minutes: number, endedAt: Date): number {
+  const MIN_BLOCK_MINUTES = 30;
+  const MIN_BLOCK_PRICE = 1900;
 
-  // Hora local de Chile, sin depender del TZ del servidor
-  const hourCL = getChileHour(endedAt);
+  if (!minutes || minutes <= 0) return 0;
 
-  const isNight = hourCL >= 0 && hourCL < 6; // 00:00–05:59
-  const ratePerHour = isNight ? 4800 : 3800;
+  // 🔥 mínimo obligatorio
+  if (minutes <= MIN_BLOCK_MINUTES) {
+    return MIN_BLOCK_PRICE;
+  }
 
-  const raw = (ratePerHour * m) / 60;
+  // 👇 aquí tu lógica normal después de 30 min
+  // ejemplo simple por minuto:
+  const pricePerMinute = 63; // ajusta si usas otro valor
 
-  // puedes redondear acá o solo en total final.
-  return roundUp100(raw);
+  return minutes * pricePerMinute;
 }
 
 function getChileHour(d: Date) {
