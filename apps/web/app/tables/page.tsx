@@ -106,10 +106,14 @@ export default function TablesPage() {
       <div style={S.header}>
         <div style={S.brand}>
           <img
-            src="/logo-klub.png"
-            alt="Klub House"
-            style={{ height: isNarrow ? 26 : 32, width: "auto", opacity: 0.95 }}
-          />
+            src="/Logo-Klub.png"
+             alt="Klub House"
+             style={{
+             height: "clamp(40px, 5vw, 64px)",
+             width: "auto",
+             objectFit: "contain",
+           }}
+         />
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <div style={S.brandTitle}>Mesas & Barra</div>
             <div style={S.brandSub}>
