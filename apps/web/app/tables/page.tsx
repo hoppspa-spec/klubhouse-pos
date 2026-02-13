@@ -97,7 +97,7 @@ export default function TablesPage() {
   }
 
   const gridCols = useMemo(() => {
-    return isNarrow ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))";
+    return isNarrow ? "repeat(1, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))";
   }, [isNarrow]);
 
   return (
