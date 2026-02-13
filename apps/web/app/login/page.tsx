@@ -56,34 +56,32 @@ export default function LoginPage() {
 
   return (
     <div style={styles.page}>
-      {/* ambient accents (subtle, no neon) */}
-      <div style={styles.glowTopLeft} />
-      <div style={styles.glowBottom} />
-
       <form onSubmit={onSubmit} style={styles.card}>
-        {/* top brand row */}
-        <div style={styles.topRow}>
-          <img src="/Logo-Klub.png" alt="Klub House" style={styles.logoLeft} />
-          <div style={styles.brandCenter}>
-            <div style={styles.title}>KLUB HOUSE · POS</div>
-            <div style={styles.subtitle}>Ingreso de usuario</div>
-          </div>
-          <img src="/Logo-Club.png" alt="Billiard Club" style={styles.logoRight} />
+        {/* LOGOS */}
+        <div style={styles.logosRow}>
+          <img src="/Logo-Klub.png" alt="Klub House" style={styles.logo} />
+          <img src="/Logo-Club.png" alt="Billiard Club" style={styles.logo} />
         </div>
 
-        {/* inputs */}
-        <div style={{ marginTop: 14 }}>
+        {/* TITLE */}
+        <div style={styles.titleWrap}>
+          <div style={styles.title}>KLUB HOUSE · POS</div>
+          <div style={styles.subtitle}>Ingreso de usuario</div>
+        </div>
+
+        {/* USER */}
+        <div style={{ marginTop: 10 }}>
           <label style={styles.label}>Usuario</label>
           <input
             value={username}
             onChange={(e) => setU(e.target.value)}
             style={inp()}
             autoComplete="username"
-            placeholder="ej: seller1"
           />
         </div>
 
-        <div style={{ marginTop: 10 }}>
+        {/* PASS */}
+        <div style={{ marginTop: 14 }}>
           <label style={styles.label}>Clave</label>
           <input
             type="password"
@@ -91,7 +89,6 @@ export default function LoginPage() {
             onChange={(e) => setP(e.target.value)}
             style={inp()}
             autoComplete="current-password"
-            placeholder="••••••••"
           />
         </div>
 
@@ -101,10 +98,7 @@ export default function LoginPage() {
           {loading ? "Entrando..." : "Entrar"}
         </button>
 
-        {/* footer id */}
-        <div style={styles.footer}>
-          <span style={styles.footerLabel}>ID:</span> <span style={styles.footerValue}>klub_house_pool</span>
-        </div>
+        <div style={styles.footerId}>ID: klub_house_pool</div>
       </form>
     </div>
   );
@@ -113,73 +107,34 @@ export default function LoginPage() {
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
-    background: "#0b0b0c", // anti-fatigue (not pure black)
-    color: "#eaeaea",
+    background: "radial-gradient(800px 400px at 50% 0%, rgba(245,196,0,0.08), transparent 60%), #060606",
+    color: "#fff",
     display: "grid",
     placeItems: "center",
     padding: 20,
-    position: "relative",
-    overflow: "hidden",
-  },
-  glowTopLeft: {
-    position: "absolute",
-    width: 520,
-    height: 520,
-    left: -180,
-    top: -220,
-    background: "radial-gradient(circle, rgba(245,196,0,0.14), rgba(245,196,0,0) 60%)",
-    filter: "blur(2px)",
-    pointerEvents: "none",
-  },
-  glowBottom: {
-    position: "absolute",
-    width: 820,
-    height: 420,
-    left: "50%",
-    transform: "translateX(-50%)",
-    bottom: -260,
-    background: "radial-gradient(circle, rgba(245,196,0,0.10), rgba(245,196,0,0) 65%)",
-    pointerEvents: "none",
   },
   card: {
-    width: "min(460px, 100%)",
-    background: "rgba(14,14,14,0.86)",
-    border: "1px solid rgba(255,255,255,0.10)",
+    width: "min(420px, 100%)",
+    background: "#0d0d0d",
+    border: "1px solid rgba(255,255,255,0.08)",
     borderRadius: 20,
-    padding: 18,
-    boxShadow: "0 18px 60px rgba(0,0,0,0.55)",
-    backdropFilter: "blur(10px)",
-    position: "relative",
+    padding: 26,
+    boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
   },
-  topRow: {
-    display: "grid",
-    gridTemplateColumns: "64px 1fr 64px",
+  logosRow: {
+    display: "flex",
+    justifyContent: "center",
     alignItems: "center",
-    gap: 10,
+    gap: 20,
+    marginBottom: 18,
   },
-  logoLeft: { width: 58, height: "auto", opacity: 0.95, justifySelf: "start" },
-  logoRight: { width: 58, height: "auto", opacity: 0.95, justifySelf: "end" },
-  brandCenter: { textAlign: "center", display: "grid", gap: 3 },
-  title: { fontWeight: 820, fontSize: 16, letterSpacing: 0.6, color: "#f3f3f3" },
-  subtitle: { fontSize: 12, color: "rgba(234,234,234,0.75)" },
-  label: { fontSize: 12, color: "rgba(234,234,234,0.72)" },
-  err: {
-    marginTop: 10,
-    padding: "10px 12px",
-    borderRadius: 14,
-    border: "1px solid rgba(255,77,77,0.22)",
-    background: "rgba(255,77,77,0.08)",
-    color: "#ff9a9a",
-    fontSize: 13,
-  },
-  footer: {
-    marginTop: 12,
-    textAlign: "center",
-    fontSize: 12,
-    color: "rgba(234,234,234,0.55)",
-  },
-  footerLabel: { opacity: 0.8 },
-  footerValue: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", opacity: 0.95 },
+  logo: { height: 70, width: "auto", objectFit: "contain" },
+  titleWrap: { textAlign: "center", marginBottom: 18 },
+  title: { fontWeight: 800, fontSize: 18 },
+  subtitle: { color: "#9a9a9a", fontSize: 13, marginTop: 4 },
+  label: { fontSize: 12, color: "#9a9a9a" },
+  err: { marginTop: 12, color: "#ff4d4d", fontSize: 13 },
+  footerId: { textAlign: "center", marginTop: 16, fontSize: 12, color: "#6f6f6f" },
 };
 
 function inp(): React.CSSProperties {
@@ -189,25 +144,23 @@ function inp(): React.CSSProperties {
     padding: "11px 12px",
     borderRadius: 14,
     border: "1px solid rgba(255,255,255,0.10)",
-    background: "#151515", // easier on eyes than #111
-    color: "#eaeaea",
+    background: "rgba(0,0,0,0.25)",
+    color: "#fff",
     outline: "none",
-    fontSize: 14,
   };
 }
 
 function btn(disabled: boolean): React.CSSProperties {
   return {
     width: "100%",
-    marginTop: 14,
+    marginTop: 16,
     padding: "12px 14px",
     borderRadius: 16,
     border: "1px solid rgba(0,0,0,0.25)",
     background: "#f5c400",
-    color: "#0b0b0c",
-    fontWeight: 850,
+    color: "#000",
+    fontWeight: 900,
     cursor: disabled ? "not-allowed" : "pointer",
     opacity: disabled ? 0.7 : 1,
-    letterSpacing: 0.3,
   };
 }
